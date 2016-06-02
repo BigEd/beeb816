@@ -1,0 +1,82 @@
+# Maximum Eagle freeware board size is 4.0x3.2" (100x80mm) 
+
+# better to work in inches for 0.1 inch pad pitch
+Grid default;
+Set Wire_Bend 0;
+Layer Dimension;
+Wire 0  (0 0) (4.0 2.70) (0 0);
+Layer Top;
+
+# PCB-Pool/PCB-Train design rule is actually 0.006/0.006 for wires
+CLASS 0 signal 0.012 0.012
+CLASS 1 supply 0.036 0.018
+
+ROTATE =R180 cap22uf_0 ;
+ROTATE =R270 CON1;
+ROTATE =R0   CON2;
+ROTATE =R270 CON3;
+ROTATE =R270 IC1 ; # 65816
+ROTATE =R90  IC2;  # RAM
+ROTATE =R0   IC3;  # plcc84 - cpld
+ROTATE =R180 IC4;
+ROTATE =R270 IC5;
+ROTATE =R270 JTAGHDR ;
+ROTATE =R90  link_blk;
+ROTATE =R270 PWRHDR ;
+ROTATE =R90  scl_r4k7_pu;
+ROTATE =R90  sda_r4k7_pu;
+
+MOVE cap22uf_0     (0.15 2.6)   ;
+MOVE CON1          (3.7  1.3)   ;
+MOVE CON2          (1.3  2.55)  ;
+MOVE CON3          (0.15  1.8)  ;
+MOVE IC1           (3.15 1.3)   ;
+MOVE IC2           (2.4  1.1)   ;
+MOVE IC3           (1.1  1.45)   ;
+MOVE IC4           (0.75 2.45) ;
+MOVE IC5           (0.6  0.25) ;
+MOVE JTAGHDR       (0.15  0.9)  ;
+MOVE link_blk      (1.95 0.65 );
+MOVE PWRHDR        (0.15 0.2)   ;
+MOVE sda_r4k7_pu   (1.05 0.35);
+MOVE scl_r4k7_pu   (0.90 0.35);
+
+# SMD components go on the bottom layer so place them first
+# and then mirror them
+ROTATE =R0 CAP100NF_1;
+ROTATE =R0 CAP100NF_3;
+ROTATE =R180   CAP100NF_6;
+ROTATE =R180   CAP100NF_7;
+ROTATE =R180   CAP100NF_8;
+ROTATE =R180   CAP100NF_9;
+ROTATE =R180   CAP100NF_10;
+
+MOVE CAP100NF_1    (1.85  1.45)  ;
+MOVE CAP100NF_3    (2.25  0.35)  ;
+MOVE CAP100NF_6    (0.85 2.6); 
+MOVE CAP100NF_7    (0.6 0.4); 
+MOVE CAP100NF_8    (2.7 2.05); 
+MOVE CAP100NF_9    (1.4 1.75);
+MOVE CAP100NF_10   (0.85 1.35);
+
+MIRROR CAP100NF_1    ;
+MIRROR CAP100NF_3    ;
+MIRROR CAP100NF_6    ;
+MIRROR CAP100NF_7    ;
+MIRROR CAP100NF_8    ;
+MIRROR CAP100NF_9    ;
+MIRROR CAP100NF_10   ;
+
+
+#TEXT Beeb816 L1B Mk1 R0 (0.05 0.05)
+
+
+Window Fit;
+
+# load autorouter params to get finer routing grid
+#Auto load auto-params-l1b.ctl;
+#Auto;       # can always hit STOP if you didn't want to route right away
+
+#Drc; 
+#RatsNest;   # to show incomplete wires
+

@@ -1,0 +1,19 @@
+#!/bin/bash
+
+# (make sure we can access the parser package)
+export CLASSPATH=../..:$CLASSPATH
+
+NLIST_PATH=../../netlister
+
+jython ${NLIST_PATH}/netlister.py -i l1b_mk1.v \
+    -l "${NLIST_PATH}/lib/l1b-custom.lib" \
+    -l "${NLIST_PATH}/lib/l1a-custom.lib" \
+    -l "${NLIST_PATH}/lib/cpu.lib" \
+    -l "${NLIST_PATH}/lib/rcl.lib" \
+    -l "${NLIST_PATH}/lib/i2c.lib" \
+    -l "${NLIST_PATH}/lib/memory.lib" \
+    -l "${NLIST_PATH}/lib/switches.lib" \
+    -l "${NLIST_PATH}/lib/idc_connectors.lib" \
+    -f scr \
+    -o l1b_mk1.scr \
+    -t l1b_mk1_footer.scr 

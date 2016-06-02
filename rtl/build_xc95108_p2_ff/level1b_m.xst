@@ -1,0 +1,3 @@
+set -tmpdir ./tmp
+set -xsthdpdir ./xst
+run -ifn level1b_m.prj -p xc95108-15-pc84 -ifmt mixed  -ofn level1b_m -ofmt NGC -top level1b_m -opt_mode speed -opt_level 2 -iuc NO -lso level1b_m.lso -keep_hierarchy No -netlist_hierarchy as_optimized  -rtlview Yes -hierarchy_separator /  -bus_delimiter <>  -case maintain  -verilog2001 YES  -fsm_extract YES -fsm_encoding COMPACT  -safe_implementation No  -mux_extract YES  -resource_sharing YES  -iobuf YES -pld_mp YES  -pld_xp YES  -wysiwyg NO  -equivalent_register_removal YES  -define {CLOCK_SWITCH_PIPELINED_RETIME_D=1 SPLIT_MAP_D=1 PIPELINE_HS_SWITCH_D=1}
