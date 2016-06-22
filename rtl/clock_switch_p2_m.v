@@ -84,7 +84,6 @@ module clock_switch_p2_m (
      else
        ls_enable_q <= !select_hs_ip & !retimed_hs_enable_w;
 
-`ifdef CLOCK_SWITCH_PIPELINED_RETIME_D
    // Pipe depth needs to be at least 3
    `define PIPE_SZ 2
    reg [`PIPE_SZ-1:0]  pipe_retime_ls_enable_q;
@@ -108,35 +107,6 @@ module clock_switch_p2_m (
        pipe_retime_hs_enable_q <= {`PIPE_SZ{1'b1}};
      else
        pipe_retime_hs_enable_q <= {1'b0, pipe_retime_hs_enable_q[`PIPE_SZ-1:1]};          
-   
-   
-`else // !`ifdef CLOCK_SWITCH_PIPELINED_RETIME_D
-   reg                 retimed_hs_enable_q;   
-   reg                 retimed_ls_enable_q;   
-   
-   assign retimed_ls_enable_w = retimed_ls_enable_q;   
-   assign retimed_hs_enable_w = retimed_hs_enable_q;                               
-   
-   // Retime the enable signals from one domain to the other.   
-   always @ ( negedge  hs_ck_ip or posedge ls_enable_q or negedge resetb ) 
-     if ( ! resetb )
-       retimed_ls_enable_q <= 1'b0;
-     else if ( ls_enable_q )
-       retimed_ls_enable_q <= 1'b1;
-     else
-       retimed_ls_enable_q <= 1'b0;
-
-  // Need to use the hs_enable as an async signal here else
-  // we might 'miss' the high enable for a single cycle and
-  // get a truncated ls phi1 pulse
-  always @ ( negedge  ls_ck_ip or posedge hs_enable_q or negedge resetb )
-    if ( !resetb)
-      retimed_hs_enable_q <= 1'b0;
-    else if ( hs_enable_q )
-      retimed_hs_enable_q <= 1'b1;
-    else
-      retimed_hs_enable_q <= 1'b0;
-`endif // !`ifdef CLOCK_SWITCH_PIPELINED_RETIME_D
    
 
 endmodule // clock_switch_m
