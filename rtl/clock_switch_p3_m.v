@@ -18,20 +18,17 @@ module clock_switch_p3_m (
                        output ck_op
                        );
 
-   `define HS_PIPE_SZ 3
+   `define HS_PIPE_SZ 2
    `define LS_PIPE_SZ 2
   
    reg [`LS_PIPE_SZ-1:0]  pipe_retime_ls_enable_q;
    reg [`HS_PIPE_SZ-1:0]  pipe_retime_hs_enable_q;
    
    reg                 hs_enable_lat_q;
-   reg                 ls_enable_lat_q;   
 
-   wire                retimed_hs_enable_w;
-   wire                retimed_ls_enable_w;
 
    wire                hs_selected_w = pipe_retime_hs_enable_q[0]  & hs_enable_lat_q;
-   wire                ls_selected_w = pipe_retime_ls_enable_q[0]  & ls_enable_lat_q;   
+   wire                ls_selected_w = pipe_retime_ls_enable_q[0] ;   
    
                 
    
@@ -47,13 +44,6 @@ module clock_switch_p3_m (
      else if ( !hs_ck_ip )
        hs_enable_lat_q <= select_hs_ip;
 
-   always @ ( ls_ck_ip or resetb or select_hs_ip )
-     if ( !resetb )
-       ls_enable_lat_q <= 1'b1;
-     else if ( !ls_ck_ip )
-       ls_enable_lat_q <= !select_hs_ip;
-
-   
    // Retime the enable from the LS clock combined with the new HS clock enable - can't enable HS 'til LS is disabled
    always @ ( negedge  hs_ck_ip or negedge resetb ) 
      if ( ! resetb )
@@ -66,6 +56,6 @@ module clock_switch_p3_m (
      if ( ! resetb )
        pipe_retime_ls_enable_q <= {`LS_PIPE_SZ{1'b1}};
      else
-       pipe_retime_ls_enable_q <= {! pipe_retime_hs_enable_q[0] & ls_enable_lat_q, pipe_retime_ls_enable_q[`LS_PIPE_SZ-1:1]};          
+       pipe_retime_ls_enable_q <= {! pipe_retime_hs_enable_q[0] & !select_hs_ip, pipe_retime_ls_enable_q[`LS_PIPE_SZ-1:1]};          
       
 endmodule // clock_switch_m

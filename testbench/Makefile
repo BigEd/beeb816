@@ -8,19 +8,14 @@
 VPATH = ../rtl
 
 # Primary targets
-all : icarus cver
+all : icarus 
 
-icarus: dump.vcd
-
-cver: verilog.dump
-
-verilog.dump : level1b_m.v clock_switch_p1_m.v ram_512kx8_m.v ram_64kx8_m.v testbench.v clock_switch_p2_m.v clock_divider24_m.v
-	cver  testbench.v ../rtl/clock_divider24_m.v ../rtl/level1b_m.v ../rtl/clock_switch_p1_m.v ../rtl/clock_switch_p2_m.v ram_64kx8_m.v ram_512kx8_m.v +define+SIMULATION_D=1
+icarus: dump.vcd 
 
 ## +define+CLOCK_SWITCH_PIPELINED_RETIME_D=1
 
 clean:
-	\rm -rf build a.out *.vcd verilog.dump
+	\rm -rf build a.out *.vcd
 
 
 # Secondary targets
@@ -28,7 +23,6 @@ clean:
 dump.vcd : a.out
 	./a.out
 
-
-a.out : level1b_m.v clock_switch_p1_m.v clock_divider24_m.v ram_512kx8_m.v ram_64kx8_m.v testbench.v clock_switch_p2_m.v
-	iverilog -D ALLOW_512K_RAM_D=1 -D SIMULATION_D=1 -D ALLOW_GPIOS_D=1 -D CLOCK_SWITCH_PIPELINED_RETIME_D=1 -m testbench ../rtl/level1b_m.v ../rtl/clock_switch_p1_m.v ../rtl/clock_switch_p2_m.v ../rtl/clock_divider24_m.v ram_512kx8_m.v ram_64kx8_m.v testbench.v
+a.out : clock_switch_p2_m.v clock_switch_tb.v 
+	iverilog -D SIMULATION_D=1 -m clock_switch_tb ../rtl/clock_switch_p2_m.v clock_switch_tb.v
 

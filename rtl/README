@@ -1,29 +1,13 @@
-#!/bin/tcsh
+#!/bin/tcsh -fv
 
 
-python ../../rombo/build.py  \
-       -a "xst: -define {CLOCK_SWITCH_PIPELINED_RETIME_D=1 SPLIT_MAP_D=1 PIPELINE_HS_SWITCH_D=1}"  \
+set BUILD_SCR =  ../scripts/build.py
+
+${BUILD_SCR}  \
+       -a "xst: -define { }"  \
        -m level1b_m \
-       -d build_xc95108_p2_ff \
+       -d build_xc95108_p3_ff \
        -f -t xc95108-15-pc84  \
        -c constraints/level1b_m.ucf -o speed
 
 
-python ../../rombo/build.py  \
-       -a "xst: -define {CLOCK_SWITCH_PIPELINED_RETIME_D=1 SPLIT_MAP_D=1 PIPELINE_HS_SWITCH_D=1}"  \
-       -m level1b_diag_m \
-       -d build_xc95108_p2_diag \
-       -f -t xc95108-15-pc84  \
-       -c constraints/level1b_m.ucf -o speed
-
-
-python ../../rombo/build.py  \
-       -a "xst: -define {TARGET_9572_D=1  CLOCK_SWITCH_PIPELINED_RETIME_D=1 SPLIT_MAP_D=1 PIPELINE_HS_SWITCH_D=1 }"  \
-       -m level1b_m \
-       -d build_xc9572_p2_ff \
-       -f -t xc9572-7-pc84  \
-       -c constraints/level1b_m.ucf -o speed
-
-cp build_xc95108_p2_diag/level1b_diag_m.jed /media/psf/Home/Desktop/build_xc95108_p2_diag.jed
-cp build_xc95108_p2_ff/level1b_m.jed /media/psf/Home/Desktop/build_xc95108_p2_ff.jed
-cp build_xc9572_p2_ff/level1b_m.jed /media/psf/Home/Desktop/build_xc9572_p2_ff.jed

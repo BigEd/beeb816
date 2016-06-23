@@ -2,9 +2,8 @@
 
 module testbench();
 
-// Number of GPIOs varies depending on how packed the CPLD is...   
-`define GPIO_IMPL_SZ      2
-   
+
+
 // define the 4 possible bus actions    
 `define ADDR_IFETCH  0
 `define ADDR_IMMED   1
@@ -185,7 +184,6 @@ module testbench();
    reg 	      rnw_r;
    reg [7:0]  cpu_data_r;
    reg [7:0]  bbc_data_r;
-   reg [`GPIO_IMPL_SZ-1:0]  gpio_r;
    
 
    // wires and combinatorial assigments
@@ -214,10 +212,8 @@ module testbench();
    wire        rdy_w;
    wire        scl_w;
    wire        sda_w;
-   wire [6:0]  gpio_w ;
 
 
-   assign gpio_w = { {( 6-`GPIO_IMPL_SZ){1'b0}}, gpio_r};
             
    // rdy and I2C ports need a pull-up
    assign (weak1,strong0) rdy_w = 1;
@@ -300,7 +296,6 @@ level1b_m dut0_u (
 	vpb_r = 1; // active low!        
 	resetb_r = 0;
 	cpu_addr_r = 23'b0;
-        gpio_r = {`GPIO_IMPL_SZ{1'bz}};
 	#100 resetb_r = 1;
 
 
@@ -361,48 +356,6 @@ level1b_m dut0_u (
         dataread( `ADDR_IFETCH,  24'h000003 , 8'hC3);        
         dataread( `ADDR_DATA, 24'hFF0101 , 8'hC1 );
         dataread( `ADDR_DATA, 24'hFF0102 , 8'hC2 );
-        $display( "-----------------------------------------------");        
-        if ( fail_count == 0 ) $display("PASS"); else $display("FAIL");                        
-        $display( "***********************************************");        
-        $display ("Check CPLD internal register read/write");        
-        vpb_r = 1;
-        fail_count = 0;                        
-        datawrite( 24'h800000, 8'h55 );
-        dataread( `ADDR_DATA, 24'h800000, 8'h55  &  {{ (8-`GPIO_IMPL_SZ){1'b0}},{`GPIO_IMPL_SZ{1'b1}}}  );
-        datawrite( 24'h800000, 8'hAA );                
-        dataread( `ADDR_DATA, 24'h800000, 8'hAA  &  {{ (8-`GPIO_IMPL_SZ){1'b0}},{`GPIO_IMPL_SZ{1'b1}}} ); 
-        $display( "-----------------------------------------------");        
-        if ( fail_count == 0 ) $display("PASS"); else $display("FAIL");
-        $display( "***********************************************");
-        $display( " Check operation of GPIOs                      ");
-        fail_count = 0;
-        // Set all GPIOs to outputs
-        datawrite( 24'h800000, 8'h00 );
-        // Write value out
-        datawrite( 24'h800001, 8'h55 );
-
-        if ( gpio_w != 7'h55 )
-          fail_count = fail_count+1;
-        dataread( `ADDR_DATA,  24'hB00001 , 8'h55 &  {{ (8-`GPIO_IMPL_SZ){1'b0}},{`GPIO_IMPL_SZ{1'b1}}} );
-        // Set all GPIOs to inputs
-        datawrite( 24'h800000, 8'hFF );
-        gpio_r = 7'h2A;
-        // Need 1 cycle between switching direction and first sampled value on inputs
-        dataread( `ADDR_DATA,  24'hB00001 , 8'hxx);
-        dataread( `ADDR_DATA,  24'hB00001 , 8'h2A &  {{ (8-`GPIO_IMPL_SZ){1'b0}},{`GPIO_IMPL_SZ{1'b1}}}  );
-
-        $display( "-----------------------------------------------");        
-        if ( fail_count == 0 ) $display("PASS"); else $display("FAIL");                        
-        $display( "***********************************************");
-        $display( " Check operation of I2C reg                    ");
-        fail_count = 0;        
-        // write and read back bottom 3 I2c bits - NB need a nop between writing the register and reading back from the pins
-        datawrite( 24'h800002, 8'h0F );
-        dataread(`ADDR_DATA,  24'hB00002 , 8'hxx);        
-        dataread(`ADDR_DATA,  24'hB00002 , 8'h07);
-        datawrite( 24'h800002, 8'h00 );
-        dataread(`ADDR_DATA,  24'hB00002 , 8'hxx);                
-        dataread(`ADDR_DATA,  24'hB00002 , 8'h00);                
         $display( "-----------------------------------------------");        
         if ( fail_count == 0 ) $display("PASS"); else $display("FAIL");
         $display( "***********************************************");
