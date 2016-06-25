@@ -10,7 +10,7 @@ VPATH = ../rtl
 # Primary targets
 all : icarus 
 
-icarus: dump.vcd 
+icarus: clock_switch_p2.vcd 
 
 ## +define+CLOCK_SWITCH_PIPELINED_RETIME_D=1
 
@@ -20,9 +20,13 @@ clean:
 
 # Secondary targets
 
-dump.vcd : a.out
-	./a.out
 
-a.out : clock_switch_p2_m.v clock_switch_tb.v 
+
+clock_switch_p2.vcd : clock_switch_p2.out
+	./clock_switch_p2.out
+	mv dump.vcd clock_switch_p2.vcd
+
+clock_switch_p2.out : clock_switch_p2_m.v clock_switch_tb.v 
 	iverilog -D SIMULATION_D=1 -m clock_switch_tb ../rtl/clock_switch_p2_m.v clock_switch_tb.v
+	mv a.out clock_switch_p2.out
 

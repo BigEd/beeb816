@@ -49,13 +49,13 @@ module clock_switch_p3_m (
      if ( ! resetb )
        pipe_retime_hs_enable_q <= {`HS_PIPE_SZ{1'b0}};
      else
-       pipe_retime_hs_enable_q <= { ! pipe_retime_ls_enable_q[0] & hs_enable_lat_q , pipe_retime_hs_enable_q[`HS_PIPE_SZ-1:1]};          
+       pipe_retime_hs_enable_q <= { !pipe_retime_ls_enable_q[0] & hs_enable_lat_q , pipe_retime_hs_enable_q[`HS_PIPE_SZ-1:1]};          
    
    // Retime the enable from the HS clock combined with the new LS clock enable - can't enable LS 'til HS is disabled          
    always @ ( negedge  ls_ck_ip or negedge resetb ) 
      if ( ! resetb )
        pipe_retime_ls_enable_q <= {`LS_PIPE_SZ{1'b1}};
      else
-       pipe_retime_ls_enable_q <= {! pipe_retime_hs_enable_q[0] & !select_hs_ip, pipe_retime_ls_enable_q[`LS_PIPE_SZ-1:1]};          
+       pipe_retime_ls_enable_q <= {!pipe_retime_hs_enable_q[0] & !hs_enable_lat_q, pipe_retime_ls_enable_q[`LS_PIPE_SZ-1:1]};          
       
 endmodule // clock_switch_m
