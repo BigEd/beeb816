@@ -67,7 +67,7 @@ module level1b_m (
 
    reg [7:0] 	 cpu_hiaddr_lat_q;
    reg [7:0]     cpu_data_r;
-
+           
    // This is the internal register controlling which features like high speed clocks etc are enabled
    reg [ `CPLD_REG_SEL_SZ-1:0] cpld_reg_select_q;
 
@@ -112,7 +112,8 @@ module level1b_m (
    assign bbc_ck2_phi1 = ! bbc_ck2_phi0;
    assign bbc_ck2_phi2 = ( !bbc_ck2_phi1 ) & bbc_ck2_phi0;
    // rdy has a pull-up resistor in the CPU
-   assign rdy = 1'bz;   
+   assign rdy = 1'bz;
+   
    assign bbc_sync = vpa & vda;
    assign irqb = 1'bz;
    assign nmib = 1'bz;
@@ -150,13 +151,10 @@ module level1b_m (
    assign dummy_access_w = (cpu_hiaddr_lat_q[7] & !himem_vidram_access_lat_q) | !ls_selected_w ;   
    assign { bbc_addr15, bbc_addr14 } = ( dummy_access_w ) ? { 2'b10 } : { addr[15], addr[14] } ;
    
-   // only allow the BBC_RNW to go low when accessing host resource in BBC_CK2_PHI2, ensuring that data lasts
-   // a little longer than the clock.
-
-   assign bbc_rnw = rnw | dummy_access_w | !(bbc_ck2_phi0 & bbc_ck2_phi2) ;
-   
+   // only allow the BBC_RNW to go low when accessing host resource in BBC_CK2_PHI2, 
+   assign bbc_rnw = rnw | dummy_access_w | !(bbc_ck2_phi2 & bbc_ck2_phi0 )  ;   
    // Drive bbc_data only for write accesses to lomem
-   assign bbc_data = ( !rnw & !dummy_access_w & (bbc_ck2_phi0 | bbc_ck2_phi2)  ) ? cpu_data : { 8{1'bz}};
+   assign bbc_data = ( resetb & !rnw & !dummy_access_w & (bbc_ck2_phi2 | bbc_ck2_phi0) ) ? cpu_data : { 8{1'bz}};
    assign cpu_data = cpu_data_r;   
 
    // Select the high speed clock only 
@@ -178,7 +176,7 @@ module level1b_m (
               cpld_reg_select_q or map_data_q or 
               cpu_hiaddr_lat_q[7]
               or bbc_data
-              or bbc_pagereg_q)     
+              or bbc_pagereg_q)
      if ( cpu_ck_phi2_w & rnw  )
        begin
 	  if (cpu_hiaddr_lat_q[7])
@@ -188,10 +186,9 @@ module level1b_m (
               cpu_data_r = {8{1'bz}};
           else
             cpu_data_r = bbc_data;
-       end // if ( cpu_ck_phi1_w & rnw )   
+         end // if ( cpu_ck_phi1_w & rnw )   
      else 
        cpu_data_r = {8{1'bz}};
-   
 
    clock_divider24_m clock_div0_u (
 				   .divider_en( map_data_q[`CLK_DIV_EN_IDX]),
