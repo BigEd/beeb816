@@ -22,11 +22,18 @@ clean:
 
 
 
+testbench.vcd: testbench.v
+	iverilog -D SIMULATION_D=1 -m testbench testbench.v ../rtl/clock_switch_p2_m.v ../rtl/hs_timing_control_m.v ../rtl/level1b_m.v ../rtl/clock_divider24_m.v ../testbench/ram_512kx8_m.v	../testbench/ram_64kx8_m.v ../rtl/clock_switch_p3_m.v ../rtl/clock_divider3_m.v
+	mv a.out testbench.out
+	./testbench.out
+	mv dump.vcd testbench.vcd
+
+
 clock_switch_p2.vcd : clock_switch_p2.out
 	./clock_switch_p2.out
 	mv dump.vcd clock_switch_p2.vcd
 
 clock_switch_p2.out : clock_switch_p2_m.v clock_switch_tb.v 
-	iverilog -D SIMULATION_D=1 -m clock_switch_tb ../rtl/clock_switch_p2_m.v clock_switch_tb.v
+	iverilog -D SIMULATION_D=1 -m clock_switch_tb ../rtl/clock_switch_p2_m.v clock_switch_tb.v ../rtl/hs_timing_control_m.v
 	mv a.out clock_switch_p2.out
 
