@@ -29,7 +29,9 @@ module testbench();
 	 dataread( `ADDR_IFETCH,  24'hFF0001 , 8'hC1);
 	 // read from himem should keep hs clk
 	 dataread( `ADDR_DATA,  24'hFF0002 , 8'hC2);
-	 dataread( `ADDR_DATA,  24'hFF0003 , 8'hC3);        
+	 dataread( `ADDR_DATA,  24'hFF0003 , 8'hC3);
+	 dataread( `ADDR_DATA,  24'hFF0004 , 8'hC4);        
+	 dataread( `ADDR_DATA,  24'hFF0005 , 8'hC5);                 
 	 // write to  lomem should force a switch
 	 datawrite( 24'h0000FF, 8'h0A);
 	 dataread( `ADDR_DATA,  24'h0000FF , 8'h0A);        
@@ -37,7 +39,16 @@ module testbench();
 	 dataread( `ADDR_DATA,  24'h00000B , 8'h0B);
 	 // back to HS mem then lowmem
 	 dataread( `ADDR_IFETCH,  24'hFF0000 , 8'hC0);
-	 dataread( `ADDR_DATA,  24'h00000A , 8'h0A);        
+	 dataread( `ADDR_DATA,  24'h00000A , 8'h0A);
+         dataread( `ADDR_IFETCH,  24'hFF0000 , 8'hC0);
+	 dataread( `ADDR_DATA,  24'h00000A , 8'h0A);    
+         dataread( `ADDR_IFETCH,  24'hFF0000 , 8'hC0);
+	 // write to  should force a switch
+	 datawrite( 24'h0080FF, 8'h0A);
+	 // now fetch from himem should force a switch
+	 dataread( `ADDR_IFETCH,  24'hFF0000 , 8'hC0);
+	 dataread( `ADDR_IFETCH,  24'hFF0001 , 8'hC1);   
+         
       end
    endtask // switch_sequence
    
@@ -107,7 +118,11 @@ module testbench();
       
       begin
          if  (rdy_w == 1'b0 )
-           wait_on_rdy( 1'b1);
+           begin
+              $display("Info: dataread() waiting on RDY") ;              
+              wait_on_rdy( 1'b1);
+           end
+         
 
          
          @(negedge tb_cpu_ck_phi2_w)
@@ -212,13 +227,17 @@ module testbench();
    wire        rdy_w;
    wire        scl_w;
    wire        sda_w;
-
+   wire [6:0]  gpio_w;
+   reg         scl_r;
+   
 
             
    // rdy and I2C ports need a pull-up
    assign (weak1,strong0) rdy_w = 1;
    assign (weak1,strong0) sda_w = 1;
-   assign (weak1,strong0) scl_w = 1;   
+   always @ ( sda_w ) 
+     scl_r <= #15 sda_w;
+   assign (weak1,strong0) scl_w = scl_r;   
    
    assign ram_addr_w[15:0] = cpu_addr_w[15:0];
    assign bbc_addr_w[13:0] = cpu_addr_w[13:0];   
@@ -297,11 +316,14 @@ level1b_m dut0_u (
 	resetb_r = 0;
 	cpu_addr_r = 23'b0;
 	#100 resetb_r = 1;
-
-
+        
+        #200 ;
+        
         // try some lo mem accesses
         $display( "***********************************************");        
         $display( "Sequence of lomem accesses in emulation mode");
+        // make sure that lowmem is not mapped to high mem to start with ...
+        datawrite( 24'h800003, 8'h00 );	        
         fail_count = 0;        
         dataread( `ADDR_IFETCH,  24'h000000 , 8'h00);
         dataread( `ADDR_IFETCH,  24'h000001 , 8'h01);
@@ -356,6 +378,7 @@ level1b_m dut0_u (
         dataread( `ADDR_IFETCH,  24'h000003 , 8'hC3);        
         dataread( `ADDR_DATA, 24'hFF0101 , 8'hC1 );
         dataread( `ADDR_DATA, 24'hFF0102 , 8'hC2 );
+        vpb_r = 1;
         $display( "-----------------------------------------------");        
         if ( fail_count == 0 ) $display("PASS"); else $display("FAIL");
         $display( "***********************************************");
@@ -372,6 +395,27 @@ level1b_m dut0_u (
         datawrite( 24'h800003, 8'h0A );	
         $display( " Check operation of Clock Switch again         ");
         
+        $display( "-----------------------------------------------");        
+        if ( fail_count == 0 ) $display("PASS"); else $display("FAIL");
+        $display( "***********************************************");                        
+        $display( " Check Video RAM mirroring and slow down    ");
+        fail_count = 0;           
+        e_r = 0;
+        datawrite( 24'h800003, 8'h38 );	
+        dataread( `ADDR_IFETCH,  24'hFF0001 , 8'hC1);        
+        dataread(`ADDR_DATA,  24'h000002 , 8'hXX);                
+        dataread(`ADDR_DATA,  24'h000002 , 8'hXX);
+        // Reads from video RAM come from upper RAM
+        dataread(`ADDR_DATA,  24'hFF4000 , 8'hC0);
+        dataread(`ADDR_DATA,  24'hFF4001 , 8'hC1);
+        // writes go to lower RAM at low speed
+        datawrite( 24'h006010, 8'hAA );	
+        datawrite( 24'h006011, 8'h55 );
+        dataread(`ADDR_DATA,  24'h006010 , 8'hAA);
+        dataread(`ADDR_DATA,  24'h006011 , 8'h55);
+        datawrite( 24'h800003, 8'h0B );	
+        $display( " Check operation of Clock Switch again         ");
+         
         fail_count = 0;           
         e_r = 0;
 	switch_sequence;	
@@ -432,8 +476,8 @@ level1b_m dut0_u (
    // fast clock asynchronous to slow clock
    always
      begin
-	#59 bbc_ck8_r = 1;
-        #59 bbc_ck8_r = 0;
+	#120 bbc_ck8_r = 1;
+        #120 bbc_ck8_r = 0;
      end
 
    
