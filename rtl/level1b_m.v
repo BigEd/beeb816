@@ -1,12 +1,7 @@
 `timescale 1ns / 1ns
 
-// Set next define to use latch on clock enable and allow more cycle time for
-// the enable to be computed (usually choose this option unless you really
-// need to be able to make sense of the timing reports...)
-// `define CLOCK_SWITCH_USE_LATCH_D 1
-
 // This retargets any interrups in native mode to high address area 0xFFxxxx
-  `define REMAP_NATIVE_INTERRUPTS_D 1
+`define REMAP_NATIVE_INTERRUPTS_D 1
 
 // RAM_MAPPED_ON_BOOT_D needs SPLIT_MAP_D to be selected too and allows the CPLD
 // to boot with the RAM mapping already enabled. This won't work with systems
@@ -14,7 +9,8 @@
 // is generally ok for the BBC and may fix Ed's flakey BBC.
 `define RAM_MAPPED_ON_BOOT_D 1
 
-`define MAP_CC_DATA_SZ     6
+`define MAP_CC_DATA_SZ     7
+`define MAP_BLOCK_HOST_WR_IDX 6
 `define MAP_ROM_IDX        5
 `define MAP_RAM_IDX        4
 `define CLK_HSCLK_EN_IDX   3
@@ -103,9 +99,9 @@ module level1b_m (
 
    
    // Debug - drive useful signals to places where we can probe
-   assign sda = hs_selected_w;
-   assign scl = cpu_ck_phi1_w;   
-   assign gpio = `GPIO_SZ'bz;
+   assign sda = 1'bz;
+   assign scl = cpu_ck_phi2_w;   
+   assign gpio = {bbc_rnw, hisync_w, hs_clk_w, himem_vidram_access_lat_q, select_hs_w, cpu_ck_phi2_w, hs_selected_w};
    
    assign cpu_ck_phi2_w = !cpu_ck_phi1_w ;   
    assign cpu_ck_phi2 =  cpu_ck_phi2_w ;   
@@ -152,9 +148,9 @@ module level1b_m (
    assign { bbc_addr15, bbc_addr14 } = ( dummy_access_w ) ? { 2'b10 } : { addr[15], addr[14] } ;
    
    // only allow the BBC_RNW to go low when accessing host resource in BBC_CK2_PHI2, 
-   assign bbc_rnw = rnw | dummy_access_w | !(bbc_ck2_phi2 & bbc_ck2_phi0 )  ;   
+   assign bbc_rnw = rnw | dummy_access_w | !(bbc_ck2_phi2 & bbc_ck2_phi0 ) | (map_data_q[`MAP_BLOCK_HOST_WR_IDX] & !addr[15]) ;   
    // Drive bbc_data only for write accesses to lomem
-   assign bbc_data = ( resetb & !rnw & !dummy_access_w & (bbc_ck2_phi2 | bbc_ck2_phi0) ) ? cpu_data : { 8{1'bz}};
+   assign bbc_data = ( resetb & !bbc_rnw & !dummy_access_w & cpu_ck_phi2_w ) ? cpu_data : { 8{1'bz}};
    assign cpu_data = cpu_data_r;   
 
    // Select the high speed clock only 

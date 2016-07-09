@@ -15,7 +15,7 @@ module clock_divider24_m(
    wire gated_clk_w = clkin & divider_en;
    
    
-   assign clkout = invert ^ ( (divider_en) ? mux_clk_w : clkin ) ;
+   assign clkout = ( (divider_en) ? invert ^ mux_clk_w : clkin ) ;
    
 
 
