@@ -50,7 +50,7 @@ module emu6502 (
    assign bbc_ck2_phi1 = ckdel_1_b;
    assign bbc_ck2_phi2 = ckdel_2;
 
-   assign cpu_ck_phi2  = ckdel_4;
+   assign cpu_ck_phi2  = ckdel_2;
 
    assign bbc_sync = vpa & vda;
    assign rdy = 1'bz;
@@ -61,7 +61,7 @@ module emu6502 (
    assign bbc_data = ( !rnw & bbc_ck2_phi2 ) ? cpu_data : { 8{1'bz}};
 
    // Drive data to 65816 databus only on PHI2 read operations (but increase hold time)
-   assign cpu_data = ( rnw & cpu_ck_phi2 ) ? bbc_data_r   : {8{1'bz}};
+   assign cpu_data = ( rnw & cpu_ck_phi2 ) ? bbc_data   : {8{1'bz}};
 
    // Disable fast on-board RAM
    assign ram_addr16 = 1'b0;
@@ -73,10 +73,10 @@ module emu6502 (
 //   always @ ( * )
 //     if ( cpu_ck_phi2 )
 //       cpu_data_r = cpu_data;
-
-   always @ ( * )
-     if ( ckdel_2 )
-       bbc_data_r = bbc_data;
-
+//
+//   always @ ( * )
+//     if ( ckdel_2 )
+//       bbc_data_r = bbc_data;
+//
 
 endmodule
