@@ -79,11 +79,9 @@ module level1b_m (
   // All addresses starting 0b11 go to the on-board RAM
   assign ram_ceb = !( cpu_ck_phi2_w && (vda | vpa ) && (cpu_hiaddr_lat_q[7:6] == 2'b11) );
 
-  // no remapping
-  assign { bbc_addr15, bbc_addr14 } = { addr[15], addr[14] } ;
-  
-  // Force dummy access when accessing himem only
-  assign dummy_access_w = cpu_hiaddr_lat_q[7] ;     
+  // Force dummy read access to ROM when accessing himem only
+  assign dummy_access_w = cpu_hiaddr_lat_q[7] ;
+  assign { bbc_addr15, bbc_addr14 } = (dummy_access_w) ? 2'b10 : { addr[15], addr[14] } ;  
   assign bbc_rnw = rnw | dummy_access_w ;     
   assign bbc_data = ( !bbc_rnw & bbc_ck2_phi2 ) ? cpu_data :  8'bz;
   
