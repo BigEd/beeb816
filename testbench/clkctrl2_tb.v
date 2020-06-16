@@ -20,9 +20,9 @@
  * but there is still the same limitation that when stopping in PHI1 (PHI2) the clock selection signal must only 
  * change in PHI1 (PHI2). 
  * 
- * /
+ */
 
-`define STOP_ON_PHI1_D 1
+//`define STOP_ON_PHI1_D 1
 `ifdef STOP_ON_PHI1_D
   `define CHANGEDGE negedge
   `define DETECTEDGE negedge

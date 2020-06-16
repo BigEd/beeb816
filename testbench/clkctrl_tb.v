@@ -11,7 +11,7 @@
  * ie for Beeb816 there's not much time to detect whether to switch to the low speed clock when running in a 
  * high speed mode if STOP_ON_PHI1 is selected - this is probably why we defaulted to stopping in PHI2 instead.
  * 
- * /
+ */
 
 
 
