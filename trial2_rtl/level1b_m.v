@@ -87,21 +87,20 @@ module level1b_m (
   wire [`BBC_PAGEREG_SZ-1:0]           bbc_pagereg_d;
 
 
+  // Force keep intermediate nets to preserve strict delay chain for clocks
   (* KEEP="TRUE" *) wire ckdel_1_b, ckdel_3_b ;
   (* KEEP="TRUE" *) wire ckdel_2, ckdel_4;
-
   INV    ckdel1   ( .I(bbc_ck2_phi0), .O(ckdel_1_b));
   INV    ckdel2   ( .I(ckdel_1_b),    .O(ckdel_2));
   INV    ckdel3   ( .I(ckdel_2),      .O(ckdel_3_b));
   INV    ckdel4   ( .I(ckdel_3_b),    .O(ckdel_4));
 
-  //   assign cpu_ck_phi2_w = !cpu_ck_phi1_w ;
+  // CPU needs to be skewed late wrt the BBC clock
+  assign bbc_ck2_phi1 = ckdel_1_b;
+  assign bbc_ck2_phi2 = ckdel_2 ;
   assign cpu_ck_phi1_w = ckdel_3_b;
   assign cpu_ck_phi2_w = ckdel_4 ;
   assign cpu_ck_phi2 =  cpu_ck_phi2_w ;
-
-  assign bbc_ck2_phi1 = ckdel_1_b;
-  assign bbc_ck2_phi2 = ckdel_2 ;
 
   assign bbc_sync = vpa & vda;
   assign rdy = 1'bz;
@@ -121,9 +120,9 @@ module level1b_m (
 
   // Force dummy read access when accessing himem explicitly but not for remapped RAM accesses which can still complete
   assign dummy_access_w = cpu_hiaddr_raw_lat_q[7] ;
-  assign { bbc_addr15, bbc_addr14 } =  (dummy_access_w) ? 2'b10: { addr[15], addr[14] } ;    
+  assign { bbc_addr15, bbc_addr14 } =  (dummy_access_w) ? 2'b10: { addr[15], addr[14] } ;
   assign bbc_rnw = rnw | dummy_access_w  ;
-  assign bbc_data = ( !bbc_rnw & bbc_ck2_phi2 ) ? cpu_data_lat_q :  8'bz;
+  assign bbc_data = ( !bbc_rnw & bbc_ck2_phi2 ) ? cpu_data :  8'bz;
   assign cpu_data = cpu_data_r;
 
   // All addresses starting with 0b10 go to internal IO registers which update on the
@@ -131,7 +130,6 @@ module level1b_m (
   // for the high address bits since it's stable by the end of phi1
   assign cpld_reg_select_d[`CPLD_REG_SEL_MAP_CC_IDX] = vda && ( cpu_data[7:6]== 2'b10) && ( addr[1:0] == 2'b11);
   assign cpld_reg_select_d[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = vda && (cpu_data[7]== 1'b0) && ( addr == `BBC_PAGED_ROM_SEL );
-
 
   // ROM remapping - use cpu_data[] to get high address bits during phi1
   always @ ( * )
@@ -216,11 +214,7 @@ module level1b_m (
     if ( cpu_ck_phi1_w )
       cpu_hiaddr_lat_q <= cpu_hiaddr_d;
 
-  // Latches for the CPU data open during PHI2 to be stable beyond cycle end
-  always @ ( * )
-    if ( cpu_ck_phi2_w )
-      cpu_data_lat_q <= cpu_data;
-
+  // Latches for the BBC data open during PHI2 to be stable beyond cycle end
   always @ ( * )
     if ( !bbc_ck2_phi1 )
       bbc_data_lat_q <= bbc_data;
