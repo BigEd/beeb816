@@ -1,0 +1,13 @@
+#!/bin/tcsh -fv
+
+
+set BUILD_SCR =  ../scripts/build.py
+
+${BUILD_SCR}  \
+       -a "xst: -define { }"  \
+       -m level1b_m \
+       -d build_xc95108_p3_ff \
+       -f -t xc95108-15-pc84  \
+       -c ../rtl/constraints/level1b_m.ucf -o speed
+
+
