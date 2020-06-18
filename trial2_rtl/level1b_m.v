@@ -66,6 +66,7 @@ module level1b_m (
 
   reg [7:0]                            cpu_hiaddr_q;
   reg [7:0]                            cpu_hiaddr_lat_q;
+  reg [7:0]                            cpu_hiaddr_raw_lat_q;  
   reg [7:0]                            cpu_data_r;
   reg [7:0]                            bbc_data_lat_q;
   reg [7:0]                            cpu_data_lat_q;
@@ -95,8 +96,8 @@ module level1b_m (
   INV    ckdel4   ( .I(ckdel_3_b),    .O(ckdel_4));
 
   //   assign cpu_ck_phi2_w = !cpu_ck_phi1_w ;
-  assign cpu_ck_phi1_w = ckdel_1_b;
-  assign cpu_ck_phi2_w = ckdel_2 ;
+  assign cpu_ck_phi1_w = ckdel_3_b;
+  assign cpu_ck_phi2_w = ckdel_4 ;
   assign cpu_ck_phi2 =  cpu_ck_phi2_w ;
 
   assign bbc_ck2_phi1 = ckdel_1_b;
@@ -118,9 +119,9 @@ module level1b_m (
   // All addresses starting 0b11 go to the on-board RAM
   assign ram_ceb = !( cpu_ck_phi2_w && (vda | vpa ) && (cpu_hiaddr_lat_q[7:6] == 2'b11) );
 
-  // Force dummy read access to ROM when accessing himem only
-  assign dummy_access_w = cpu_hiaddr_lat_q[7] ;
-  assign { bbc_addr15, bbc_addr14 } = (dummy_access_w) ? 2'b10 : { addr[15], addr[14] } ;  
+  // Force dummy read access when accessing himem explicitly but not for remapped RAM accesses which can still complete
+  assign dummy_access_w = cpu_hiaddr_raw_lat_q[7] ;
+  assign { bbc_addr15, bbc_addr14 } =  (dummy_access_w) ? 2'b10: { addr[15], addr[14] } ;    
   assign bbc_rnw = rnw | dummy_access_w  ;
   assign bbc_data = ( !bbc_rnw & bbc_ck2_phi2 ) ? cpu_data_lat_q :  8'bz;
   assign cpu_data = cpu_data_r;
@@ -137,7 +138,7 @@ module level1b_m (
     if (!cpu_data[7] & map_data_q[`MAP_ROM_IDX] & addr[15] )
       // Remap MOS from C000-FBFF only (exclude IO space and vectors)
       if ( addr[14] & !(&(addr[13:10])))
-        remapped_rom_access_r = 0;
+        remapped_rom_access_r = 1;
       else if ( !addr[14] & (bbc_pagereg_q[`BBC_PAGEREG_SZ-1:0] == `BASICROM_NUMBER))
         remapped_rom_access_r = 1;
       else
@@ -145,9 +146,10 @@ module level1b_m (
     else
       remapped_rom_access_r = 0;
 
-  // RAM remapping - try lowest 8K only, safe in all video modes
+  // RAM remapping - remap all of 32K RAM for reads and writes while CPU runs at BBC clock speed,
+  // but HS clock switching will need to care for which RAM is being used for video when writing
   always @ ( * )
-    if (!cpu_data[7] & map_data_q[`MAP_RAM_IDX] & !(|addr[15:9]))
+    if (!cpu_data[7] & map_data_q[`MAP_RAM_IDX] & !addr[15])
       remapped_ram_access_r = 1;
     else
       remapped_ram_access_r = 0;
@@ -161,7 +163,7 @@ module level1b_m (
       if (cpu_hiaddr_lat_q[7] & cpld_reg_select_q[`CPLD_REG_SEL_MAP_CC_IDX])
           cpu_data_r = map_data_q;
       else if (!cpu_hiaddr_lat_q[7])
-        cpu_data_r = bbc_data;
+        cpu_data_r = bbc_data_lat_q;
       else // Hi RAM access
         cpu_data_r = 8'bz;
     else
@@ -203,10 +205,13 @@ module level1b_m (
     else
       cpld_reg_select_q = cpld_reg_select_d ;
 
-  // Take a FF copy of the high address bits
-  always @ ( posedge cpu_ck_phi2_w )
-    cpu_hiaddr_q <= cpu_hiaddr_d;
 
+  // Need an early copy of the high address bits before any remapping
+  always @ ( * )
+    if ( cpu_ck_phi1_w )
+      cpu_hiaddr_raw_lat_q <= cpu_data;
+
+  // Latch the high address bits at end of phi1 after any remapping
   always @ ( * )
     if ( cpu_ck_phi1_w )
       cpu_hiaddr_lat_q <= cpu_hiaddr_d;
