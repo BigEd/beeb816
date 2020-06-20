@@ -7,7 +7,7 @@
 // to boot with the RAM mapping already enabled. This won't work with systems
 // like the Oric which have IO space at the bottom of the address map, but
 // is generally ok for the BBC and may fix Ed's flakey BBC.
-`define RAM_MAPPED_ON_BOOT_D 1
+//`define RAM_MAPPED_ON_BOOT_D 1
 
 `define MAP_CC_DATA_SZ     7
 `define MAP_BLOCK_HOST_WR_IDX 6

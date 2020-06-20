@@ -4,12 +4,12 @@
 Grid default;
 Set Wire_Bend 0;
 Layer Dimension;
-Wire 0  (0 0) (4.0 2.70) (0 0);
+Wire 0  (0 0) (4.0 3.2) (0 0);
 Layer Top;
 
 # PCB-Pool/PCB-Train design rule is actually 0.006/0.006 for wires
-CLASS 0 signal 0.012 0.012
-CLASS 1 supply 0.036 0.018
+CLASS 0 signal 0.010 0.010
+CLASS 1 supply 0.020 0.010
 
 ROTATE =R180 cap22uf_0 ;
 ROTATE =R270 CON1;
@@ -74,9 +74,17 @@ MIRROR CAP100NF_10   ;
 Window Fit;
 
 # load autorouter params to get finer routing grid
-#Auto load auto-params-l1b.ctl;
-#Auto;       # can always hit STOP if you didn't want to route right away
+Auto load /tmp/auto-params-l1b.ctl;
+Auto;       # can always hit STOP if you didn't want to route right away
 
-#Drc; 
-#RatsNest;   # to show incomplete wires
+## Define power fills top and bottom over whole board area
+layer Top ; 
+polygon VSS 0.08 (0 0) (0 3.2) (4.0 3.2) (4.0 0) (0 0) ;
+
+layer Bottom ; 
+polygon VSS 0.08 (0 0) (0 3.2) (4.0 3.2) (4.0 0) (0 0) ;
+
+RatsNest;   # to show incomplete wires and polygons
+Drc; 
+
 

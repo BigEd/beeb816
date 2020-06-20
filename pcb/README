@@ -1,11 +1,14 @@
 #!/bin/bash
 
 # (make sure we can access the parser package)
-export CLASSPATH=../..:$CLASSPATH
+export CLASSPATH=../../:$CLASSPATH
+export TERM=xterm
 
-NLIST_PATH=../../netlister
+NLIST_PATH=../../../netlister
 
-jython ${NLIST_PATH}/netlister.py -i l1b_mk1.v \
+cp auto-params-l1b.ctl /tmp
+
+jython ${NLIST_PATH}/src/netlister.py -i l1b_mk1.v \
     -l "${NLIST_PATH}/lib/l1b-custom.lib" \
     -l "${NLIST_PATH}/lib/l1a-custom.lib" \
     -l "${NLIST_PATH}/lib/cpu.lib" \

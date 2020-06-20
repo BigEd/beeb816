@@ -8,12 +8,14 @@ ${BUILD_SCR}  \
         -m emu6502 \
         -d build_xc95108_p3_ff \
         -f -t xc95108-15-pc84  \
-        -c ../rtl/constraints/level1b_m.ucf -o speed
-##${BUILD_SCR}  \
-##       -a "xst: -define { }"  \
-##       -m level1b_m \
-##       -d build_xc9572_p3_ff \
-##       -f -t xc9572-10-pc84  \
-##       -c constraints/level1b_m.ucf -o speed
+        -c ../rtl/constraints/level1b_m.ucf -o speed &
+${BUILD_SCR}  \
+       -a "xst: -define { }"  \
+       -m emu6502 \
+       -d build_xc9572_p3_ff \
+       -f -t xc9572-10-pc84  \
+       -c ../rtl/constraints/level1b_m.ucf -o speed &
+
+wait       
 
 
