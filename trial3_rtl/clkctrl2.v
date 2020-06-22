@@ -16,7 +16,7 @@ module clkctrl2(
 
   wire                    lodetect_w;
   wire                    hidetect_w;
-  wire                    cpuclk_w = (cpuclk_div_sel[1]) ? hsclk_by8_q : (cpuclk_div_sel[0]? hsclk_by4_q: hsclk_by2_q);
+  wire                    cpuclk_w = (cpuclk_div_sel[1]) ? hsclk_by8_q : (cpuclk_div_sel[0]? hsclk_by8_q: hsclk_by4_q);
   wire                    hsclk_w  = (hsclk_div_sel[1]) ? hsclk_by4_q : (hsclk_div_sel[0]? hsclk_by2_q: hsclk_in);
 
   as_edge_detect as_detect_u ( hsclk_w , lsclk_in, rst_resync1_qb & (state_q==WAITLSE), lodetect_w);
@@ -66,13 +66,23 @@ module clkctrl2(
 
   always @ ( posedge hsclk_in )
     if ( !rst_resync1_qb )
-      { hsclk_by2_q, hsclk_by4_q, hsclk_by8_q} <= 3'b0;
+      hsclk_by2_q <= 1'b0;
     else
-      begin
-        hsclk_by2_q <= !hsclk_by2_q;
-        hsclk_by4_q <= hsclk_by2_q ^ hsclk_by4_q;
-        hsclk_by8_q <= hsclk_by4_q ^ (hsclk_by2_q & hsclk_by4_q);
-      end
+      hsclk_by2_q <= !hsclk_by2_q;
+
+  always @ ( posedge hsclk_by2_q )
+    if ( !rst_resync1_qb )
+      hsclk_by4_q <= 1'b0;
+    else
+      hsclk_by4_q <= !hsclk_by4_q;
+
+  always @ ( posedge hsclk_by4_q )
+    if ( !rst_resync1_qb )
+      hsclk_by8_q <= 1'b0;
+    else
+      hsclk_by8_q <= !hsclk_by8_q;
+  
+  
 endmodule
 
 
