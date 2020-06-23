@@ -87,18 +87,19 @@ module level1b_m (
   wire                                 dummy_access_w;
   wire [ `CPLD_REG_SEL_SZ-1:0]         cpld_reg_select_d;
   wire                                 cpuclk_w;
-                                 
+
 
   // Force keep intermediate nets to preserve strict delay chain for clocks
   (* KEEP="TRUE" *) wire ckdel_1_b, ckdel_3_b ;
   (* KEEP="TRUE" *) wire ckdel_2, ckdel_4;
   (* KEEP="TRUE" *) wire cpuckdel_1_b, cpuckdel_2;
-  (* KEEP="TRUE" *) wire cpuckdel_3_b, cpuckdel_4;  
-  
+  (* KEEP="TRUE" *) wire cpuckdel_3_b, cpuckdel_4;
+
   INV    ckdel1   ( .I(bbc_ck2_phi0), .O(ckdel_1_b));
   INV    ckdel2   ( .I(ckdel_1_b),    .O(ckdel_2));
   INV    ckdel3   ( .I(ckdel_2),      .O(ckdel_3_b));
   INV    ckdel4   ( .I(ckdel_3_b),    .O(ckdel_4));
+
   INV    ckdel5   ( .I(cpuclk_w),     .O(cpuckdel_1_b));
   INV    ckdel6   ( .I(cpuckdel_1_b), .O(cpuckdel_2));
   INV    ckdel7   ( .I(cpuckdel_2),   .O(cpuckdel_3_b));
@@ -107,14 +108,9 @@ module level1b_m (
   // CPU needs to be skewed late wrt the BBC clock
   assign bbc_ck2_phi1 = ckdel_1_b;
   assign bbc_ck2_phi2 = ckdel_2 ;
-
-  // Here just select the nominated cpu clock directly for initial synthesis
-  assign cpu_ck_phi2_w = ( map_data_q[`MAP_HSCLK_ENABLE] ) ? cpuckdel_4 : ckdel_4;
-  //assign cpu_ck_phi1_w = ckdel_3_b;
-  //assign cpu_ck_phi2_w = ckdel_4 ;
-  assign cpu_ck_phi1_w = !cpu_ck_phi2_w;
+  assign cpu_ck_phi1_w = !cpuclk_w;
+  assign cpu_ck_phi2_w = cpuclk_w;
   assign cpu_ck_phi2 =  cpu_ck_phi2_w ;
-
 
   assign bbc_sync = vpa & vda;
   assign rdy = 1'bz;
@@ -122,7 +118,16 @@ module level1b_m (
   assign nmib = 1'bz;
   assign sda = 1'bz;
   assign scl = 1'bz;
-  assign gpio = `GPIO_SZ'bz;
+  // Bring out signals for observation on GPIO
+  assign gpio = {
+                  bbc_ck2_phi0,
+                  hsclk,
+                  cpuclk_w,
+                  cpu_ck_phi2_w,
+                  hsclk_sel_r,
+                  hsclk_sel_q
+                  };
+
 
   // Drive the all RAM address pins, allowing for 512K RAM connection
   assign ram_addr16 = cpu_hiaddr_lat_q[0] ;
@@ -148,23 +153,30 @@ module level1b_m (
   // HSCLK selection
   always @ ( * )
     begin
-      hsclk_sel_r = 1'b0;
       if (map_data_q[`MAP_HSCLK_ENABLE] )
-        if ( cpu_hiaddr_lat_q[7] & vpa & vda & rnw ) // Instruction fetch in high memory, remapped or native
-          hsclk_sel_r = 1'b1;
-        else if (hsclk_sel_q & cpu_hiaddr_raw_lat_q[7] & vda ) // Stay in HS mode for native reads and writes to high memory
-          hsclk_sel_r = 1'b1;
-        else if (hsclk_sel_q & cpu_hiaddr_lat_q[7] & rnw &  vda ) // Stay in HS mode for remapped read operations only
-          hsclk_sel_r = 1'b1;
+        begin
+          if ( vpa & vda & rnw )                              // Switch on instruction fetch in high memory (remapped or native) or low memory
+            hsclk_sel_r = cpu_hiaddr_lat_q[7];
+          else if ( cpu_hiaddr_raw_lat_q[7] & (vda|vpa) )     // Stay in current clock for all (non-remapped) data accesses to high memory
+            hsclk_sel_r = hsclk_sel_q;
+          else if ( cpu_hiaddr_lat_q[7] & rnw & (vda|vpa) )   // Stay in current clock for all remapped read accesses to high memory
+            hsclk_sel_r = hsclk_sel_q;
+          else if ( !vda & !vpa )                             // no clock change on 65816 mode internal cycles (vpa=vda=0)
+            hsclk_sel_r = hsclk_sel_q;
+          else                                                // Else default back to LS clock
+            hsclk_sel_r = 1'b0;
+        end
+      else
+        hsclk_sel_r = 1'b0;
     end // always @ ( * )
 
   // ROM remapping - use cpu_data[] to get high address bits during phi1
   always @ ( * )
-    if (!cpu_data[7] & map_data_q[`MAP_ROM_IDX] & addr[15] )
+    if (!cpu_data[7] & map_data_q[`MAP_ROM_IDX] & addr[15] & (vpa|vda))
       // Remap MOS from C000-FBFF only (exclude IO space and vectors)
-      if ( addr[14] & !(&(addr[13:10])))
+      if ( addr[14] & !(&(addr[13:10])) & (vpa|vda))
         remapped_rom_access_r = 1;
-      else if ( !addr[14] & (bbc_pagereg_q[`BBC_PAGEREG_SZ-1:0] == `BASICROM_NUMBER))
+      else if ( !addr[14] & (bbc_pagereg_q[`BBC_PAGEREG_SZ-1:0] == `BASICROM_NUMBER) & (vpa|vda))
         remapped_rom_access_r = 1;
       else
         remapped_rom_access_r = 0;
@@ -174,7 +186,7 @@ module level1b_m (
   // RAM remapping - remap all of 32K RAM for reads and writes while CPU runs at BBC clock speed,
   // but HS clock switching will need to care for which RAM is being used for video when writing
   always @ ( * )
-    if (!cpu_data[7] & map_data_q[`MAP_RAM_IDX] & !addr[15])
+    if (!cpu_data[7] & map_data_q[`MAP_RAM_IDX] & !addr[15] & (vpa|vda))
       remapped_ram_access_r = 1;
     else
       remapped_ram_access_r = 0;
@@ -231,12 +243,12 @@ module level1b_m (
       cpld_reg_select_q = cpld_reg_select_d ;
 
   // HS clk is selected during phi2 so flop the signal at the end of the period
-  always @ (posedge cpu_ck_phi1_w)
+  always @ (posedge cpu_ck_phi1_w )
     if ( !resetb )
       hsclk_sel_q <= 1'b0;
     else
       hsclk_sel_q <= hsclk_sel_r;
-    
+
   // Need an early copy of the high address bits before any remapping
   always @ ( * )
     if ( cpu_ck_phi1_w )
@@ -254,7 +266,7 @@ module level1b_m (
 
   clkctrl2 U_0(
                .hsclk_in(hsclk),
-               .lsclk_in(bbc_ck2_phi0),
+               .lsclk_in(ckdel_4),
                .rst_b(resetb & map_data_q[`MAP_HSCLK_SRST_B]),
                .hsclk_sel(hsclk_sel_r),
                .hsclk_div_sel( map_data_q[`CLK_HSCLK_DIV_IDX_HI:`CLK_HSCLK_DIV_IDX_LO]),
