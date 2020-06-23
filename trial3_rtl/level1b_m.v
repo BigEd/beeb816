@@ -158,9 +158,11 @@ module level1b_m (
           if ( vpa & vda & rnw )                              // Switch on instruction fetch in high memory (remapped or native) or low memory
             hsclk_sel_r = cpu_hiaddr_lat_q[7];
           else if ( cpu_hiaddr_raw_lat_q[7] & (vda|vpa) )     // Stay in current clock for all (non-remapped) data accesses to high memory
+            hsclk_sel_r = hsclk_sel_q; 
+          else if ( cpu_hiaddr_lat_q[7] & rnw & (vda|vpa) )   // Stay in current clock for all remapped read accesses to high memory            
             hsclk_sel_r = hsclk_sel_q;
-          else if ( cpu_hiaddr_lat_q[7] & rnw & (vda|vpa) )   // Stay in current clock for all remapped read accesses to high memory
-            hsclk_sel_r = hsclk_sel_q;
+          else if ( cpu_hiaddr_lat_q[7] & !addr[14] & !addr[13] & (vda|vpa) )   // Stay in current clock for all remapped accesses to lowest 8K memory            
+            hsclk_sel_r = hsclk_sel_q;          
           else if ( !vda & !vpa )                             // no clock change on 65816 mode internal cycles (vpa=vda=0)
             hsclk_sel_r = hsclk_sel_q;
           else                                                // Else default back to LS clock
