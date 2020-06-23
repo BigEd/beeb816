@@ -9,7 +9,7 @@ module s_edge_detect( clk, din, srst_b, dout);
 
 `ifdef STOP_ON_PHI1_D
   assign dout = r1_q & !din & srst_b;
-  always @ ( posedge clk )
+  always @ ( negedge clk )
     if ( !srst_b)
       r1_q  <= 0;
     else
