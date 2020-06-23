@@ -59,7 +59,6 @@ module clkctrl2_tb ;
     
   initial
     begin
-
       $dumpvars();
         
       reset_b_r = 0;
@@ -69,10 +68,6 @@ module clkctrl2_tb ;
       #500 reset_b_r = 1;
       #2000;
 
-
-      // Always need to wait for the right edge to select a change
-      // - ie if stopping in PHI1 then enable must be asserted in PHI1
-      // - ie if stopping in PHI2 then enable must be asserted in PHI2
       #2500  @ ( `CHANGEDGE clkout);
       #(`HSCLK_HALF_CYCLE-4) hienable_r = 1;
 
@@ -97,6 +92,8 @@ module clkctrl2_tb ;
   always
     #`HSCLK_HALF_CYCLE hsclk_r = !hsclk_r ;
 
+
+`ifdef SYNC_SWITCH_D  
   clkctrl2       clkctrl2_u(
                             .hsclk_in(hsclk_r),
                             .lsclk_in(lsclk_r),
@@ -106,6 +103,17 @@ module clkctrl2_tb ;
                             .cpuclk_div_sel(`CPUCLK_DIV),
                             .clkout(clkout)
                 );
+`else
+  clkctrl       clkctrl_u(
+                          .hsclk_in(hsclk_r),
+                          .lsclk_in(lsclk_r),
+                          .rst_b(reset_b_r),
+                          .hsclk_sel(hienable_r),
+                          .cpuclk_div_sel(`CPUCLK_DIV),
+                          .clkout(clkout)
+                );
+`endif
+  
 endmodule
 
 
