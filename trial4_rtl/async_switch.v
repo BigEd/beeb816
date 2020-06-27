@@ -17,56 +17,56 @@ module async_switch (
 
   assign clkout = (hsen_pipe_q[1] & hsclk & hsen_lat_q) | (lsen_pipe_q[1] & lsclk & lsen_lat_q);
 
-  always @ ( hsclk or reset_b )
+  always @ ( * )
     if ( ! reset_b )
       hsen_lat_q <= 1'b0;
-    else if (hsclk)
+    else if (!hsclk)
       hsen_lat_q <= hsen;
 
-  always @ ( lsclk or reset_b)
+  always @ ( * )
     if ( ! reset_b )
       lsen_lat_q <= 1'b1;
-    else if (lsclk )
+    else if (!lsclk )
       lsen_lat_q <= !hsen;
 
   always @ (negedge hsclk or negedge reset_b)
     if ( !reset_b )
       hsen_pipe_q[1:0] <= 2'b0;
     else
-      hsen_pipe_q[1:0] <= { hsen_pipe_q[0], hsen_lat_q & !lsen_pipe_q[1] } ;
+      hsen_pipe_q[1:0] <= { hsen_lat_q & hsen_pipe_q[0], hsen_lat_q & !lsen_pipe_q[0] } ;
 
   always @ (negedge lsclk or negedge reset_b)
     if ( !reset_b )
       lsen_pipe_q[1:0] <= 2'b11;
     else
-      lsen_pipe_q[1:0] <= { lsen_pipe_q[0], lsen_lat_q & !hsen_pipe_q[1] } ;
+      lsen_pipe_q[1:0] <= { lsen_lat_q & lsen_pipe_q[0], lsen_lat_q & !hsen_pipe_q[0] } ;
 `else
 
   assign clkout = (!hsen_pipe_q[1] | hsclk | !hsen_lat_q) & (!lsen_pipe_q[1] | lsclk | !lsen_lat_q);
 
-  always @ ( hsclk or reset_b )
+  always @ ( * )
     if ( !reset_b )
       hsen_lat_q <= 1'b0;
-    else if (!hsclk)
+    else if (hsclk)
       hsen_lat_q <= hsen;
 
-  always @ ( lsclk or reset_b)
+  always @ ( *)
     if ( !reset_b )
       lsen_lat_q <= 1'b1;
-    else if (!lsclk )
+    else if (lsclk )
       lsen_lat_q <= !hsen;
 
   always @ (posedge hsclk or negedge reset_b )
     if ( !reset_b )
       hsen_pipe_q <= 2'b0;
     else
-      hsen_pipe_q <= { hsen_pipe_q[0], hsen_lat_q & !lsen_pipe_q[1] } ;
+      hsen_pipe_q <= { hsen_lat_q & hsen_pipe_q[0], hsen_lat_q & !lsen_pipe_q[0] } ;
 
   always @ (posedge lsclk or negedge reset_b)
     if ( !reset_b )
       lsen_pipe_q <= 2'b11;
     else
-      lsen_pipe_q <= { lsen_pipe_q[0], lsen_lat_q & !hsen_pipe_q[1] } ;
+      lsen_pipe_q <= { lsen_lat_q & lsen_pipe_q[0], lsen_lat_q & !hsen_pipe_q[0] } ;
 
 `endif
 

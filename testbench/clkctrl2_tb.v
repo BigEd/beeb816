@@ -32,23 +32,17 @@
 //`define DIVIDE_BY_4_D 
 
 
-`ifdef STOP_ON_PHI1_D
-  `define CHANGEDGE negedge
-`else
-  `define CHANGEDGE posedge
-`endif
+`define CHANGEDGE negedge
 
 
 `define LSCLK_HALF_CYCLE 250     // 2MHz mother board clock
 `define HSCLK_HALF_CYCLE  30.5   //  16.384MHZ XTAL
 
-`define HSCLK_DIV 2'b00          // Divide by 1
-`define CPUCLK_DIV 2'b00         // Divide by 2
+`define HSCLK_DIV 2'b00          
+`define CPUCLK_DIV 2'b00         
 
 
 module clkctrl2_tb ;
-
-  parameter	  HSRUNNING=2'h0, WAITLSE=2'h1,LSRUNNING=2'h3,WAITHSE=2'h2;
 
   reg	reset_b_r;
   reg 	lsclk_r;
@@ -56,7 +50,9 @@ module clkctrl2_tb ;
   reg   hienable_r;
 
   wire  clkout;
-    
+  wire  hsclk_selected_w;
+
+  
   initial
     begin
       $dumpvars();
@@ -101,6 +97,7 @@ module clkctrl2_tb ;
                             .hsclk_sel(hienable_r),
                             .hsclk_div_sel(`HSCLK_DIV),
                             .cpuclk_div_sel(`CPUCLK_DIV),
+                            .hsclk_selected(hsclk_selected_w),
                             .clkout(clkout)
                 );
 `else
@@ -110,6 +107,7 @@ module clkctrl2_tb ;
                           .rst_b(reset_b_r),
                           .hsclk_sel(hienable_r),
                           .cpuclk_div_sel(`CPUCLK_DIV),
+                          .hsclk_selected(hsclk_selected_w),
                           .clkout(clkout)
                 );
 `endif
