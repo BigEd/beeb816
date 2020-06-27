@@ -106,16 +106,16 @@ module level1b_m (
   INV    ckdel7   ( .I(cpuckdel_2),   .O(cpuckdel_3_b));
   INV    ckdel8   ( .I(cpuckdel_3_b), .O(cpuckdel_4));
 
-  clkctrl2 U_0(
-               .hsclk_in(hsclk),
-               .lsclk_in(ckdel_4),
-               .rst_b(resetb & map_data_q[`MAP_HSCLK_SRST_B]),
-               .hsclk_sel(hsclk_sel_r),
-               .hsclk_div_sel( map_data_q[`CLK_HSCLK_DIV_IDX_HI:`CLK_HSCLK_DIV_IDX_LO]),
-               .cpuclk_div_sel(map_data_q[`CLK_CPUCLK_DIV_IDX_HI:`CLK_CPUCLK_DIV_IDX_LO]),
-               .hsclk_selected(hsclk_selected_w),
-               .clkout(cpuclk_w)
-               );
+  clkctrl U_0(
+              .hsclk_in(hsclk),
+              .lsclk_in(ckdel_4),
+              .rst_b(resetb & map_data_q[`MAP_HSCLK_SRST_B]),
+              .hsclk_sel(hsclk_sel_r),
+              .hsclk_div_sel( map_data_q[`CLK_HSCLK_DIV_IDX_HI:`CLK_HSCLK_DIV_IDX_LO]),
+              .cpuclk_div_sel(map_data_q[`CLK_CPUCLK_DIV_IDX_HI:`CLK_CPUCLK_DIV_IDX_LO]),
+              .hsclk_selected(hsclk_selected_w),
+              .clkout(cpuclk_w)
+              );
 
   // CPU needs to be skewed late wrt the BBC clock
   assign bbc_ck2_phi1 = ckdel_1_b;
