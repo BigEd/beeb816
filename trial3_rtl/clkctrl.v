@@ -1,14 +1,14 @@
-module clkctrl2(
-                input       hsclk_in,
-                input       lsclk_in,
-                input       rst_b,
-                input       hsclk_sel,
-                input [1:0] hsclk_div_sel,
-                input [1:0] cpuclk_div_sel,
-                output      hsclk_selected,
-                output      clkout
-                );
-
+module clkctrl(
+               input       hsclk_in,
+               input       lsclk_in,
+               input       rst_b,
+               input       hsclk_sel,
+               input [1:0] hsclk_div_sel,
+               input [1:0] cpuclk_div_sel,
+               output      hsclk_selected,
+               output      clkout
+               );
+  
   parameter       HSRUNNING=2'h0, WAITLSE=2'h1,LSRUNNING=2'h3,WAITHSE=2'h2;
   reg [1:0]               state_q, state_d;
   reg                     hsclk_by2_q, hsclk_by4_q, hsclk_by8_q;
