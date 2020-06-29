@@ -62,10 +62,10 @@ module level1b_m (
   
   reg [7:0]                            cpu_hiaddr_lat_q;
   reg [7:0]                            cpu_data_r;  
-  
+  reg [7:0]                            bbc_data_lat_q;
+  reg [7:0]                            cpu_data_lat_q;
   // This is the internal register controlling which features like high speed clocks etc are enabled
   reg [ `CPLD_REG_SEL_SZ-1:0]          cpld_reg_select_q;
-  
   // This will be a copy of the BBC ROM page register so we know which ROM is selected
   reg [`BBC_PAGEREG_SZ-1:0]            bbc_pagereg_q;
   reg [`MAP_CC_DATA_SZ-1:0]            map_data_q;  
@@ -87,17 +87,25 @@ module level1b_m (
   wire                                 native_mode_int_w;
   wire                                 himem_w;
                                 
-`ifdef REMAP_NATIVE_INTERRUPTS_D   
-  // Native mode interrupts will be redirected to himem
-  assign native_mode_int_w = !vpb & !cpu_e ;   
-`else
-  assign native_mode_int_w = 1'b0;   
-`endif
-  
-  
+  // Force keep intermediate nets to preserve strict delay chain for clocks
+  (* KEEP="TRUE" *) wire ckdel_1_b, ckdel_3_b;
+  (* KEEP="TRUE" *) wire ckdel_2, ckdel_4;
+  (* KEEP="TRUE" *) wire cpuckdel_1_b, cpuckdel_2;
+  (* KEEP="TRUE" *) wire cpuckdel_3_b, cpuckdel_4;
+
+  INV    ckdel1   ( .I(bbc_ck2_phi0), .O(ckdel_1_b));
+  INV    ckdel2   ( .I(ckdel_1_b),    .O(ckdel_2));
+  INV    ckdel3   ( .I(ckdel_2),      .O(ckdel_3_b));
+  INV    ckdel4   ( .I(ckdel_3_b),    .O(ckdel_4));
+
+  INV    ckdel5   ( .I(cpuclk_w),     .O(cpuckdel_1_b));
+  INV    ckdel6   ( .I(cpuckdel_1_b), .O(cpuckdel_2));
+  INV    ckdel7   ( .I(cpuckdel_2),   .O(cpuckdel_3_b));
+  INV    ckdel8   ( .I(cpuckdel_3_b), .O(cpuckdel_4));
+
   clkctrl U_0 (
                .hsclk_in(hsclk),
-               .lsclk_in(!bbc_ck2_phi0),
+               .lsclk_in(ckdel_3_b),
                .rst_b(resetb),
                .hsclk_sel(select_hs_w),
                .cpuclk_div_sel(map_data_q[`CLK_CPUCLK_DIV_IDX_HI:`CLK_CPUCLK_DIV_IDX_LO]),
@@ -108,8 +116,10 @@ module level1b_m (
   
   assign cpu_ck_phi2_w = !cpu_ck_phi1_w ;   
   assign cpu_ck_phi2 =  cpu_ck_phi2_w ;   
-  assign bbc_ck2_phi1 = ! bbc_ck2_phi0;
-  assign bbc_ck2_phi2 = ( !bbc_ck2_phi1 ) & bbc_ck2_phi0;
+//  assign bbc_ck2_phi1 = cpu_ck_phi1_w;  
+//  assign bbc_ck2_phi2 = !cpu_ck_phi1_w;
+  assign bbc_ck2_phi1 = ckdel_3_b;  
+  assign bbc_ck2_phi2 = ckdel_4;
 
   assign bbc_sync = vpa & vda;
   assign rdy = 1'bz;
@@ -118,15 +128,15 @@ module level1b_m (
   assign sda = 1'bz;
   assign scl = 1'bz;
   // Bring out signals for observation on GPIO
-  assign gpio = {
-                  bbc_ck2_phi0,
-                  hsclk,
-                  cpu_ck_phi1_w,
-                  cpu_ck_phi2_w,
-                  hs_selected_w,
-                  ls_selected_w
-                  };
+  assign gpio = {`GPIO_SZ{1'bz}};  
 
+`ifdef REMAP_NATIVE_INTERRUPTS_D   
+  // Native mode interrupts will be redirected to himem
+  assign native_mode_int_w = !vpb & !cpu_e ;   
+`else
+  assign native_mode_int_w = 1'b0;   
+`endif
+  
   // Drive the all RAM address pins, allowing for 512K RAM connection
   assign ram_addr16 = cpu_hiaddr_lat_q[0] ;
   assign ram_addr17 = cpu_hiaddr_lat_q[1] ;
@@ -144,22 +154,23 @@ module level1b_m (
 
   assign { bbc_addr15, bbc_addr14 } = ( dummy_access_w ) ? { 2'b10 } : { addr[15], addr[14] } ;
   assign bbc_rnw = rnw | dummy_access_w ;   
-  assign bbc_data = ( !bbc_rnw & cpu_ck_phi2_w ) ? cpu_data : { 8{1'bz}};
+  assign bbc_data = ( !bbc_rnw & cpu_ck_phi2_w ) ? cpu_data_lat_q : { 8{1'bz}};
   assign cpu_data = cpu_data_r;   
 
   // Assume only lowest 8K of RAM is not used for video
-  assign himem_vram_wr_d = !cpu_data[7] & (map_data_q[`MAP_RAM_IDX] & !addr[15] & (addr[14]|addr[13]) & !rnw) ;
+  assign himem_vram_wr_d = !cpu_data[7] & (map_data_q[`MAP_RAM_IDX] & !addr[15] & (addr[14]|addr[13]) & !rnw & (vpa|vda)) ;
   // Select the high speed clock only 
   // * on valid instruction fetches from himem, or
   // * on valid imm/data fetches from himem _if_ hs clock is already selected, or
   // * on invalid bus cycles if hs clock is already selected
   assign himem_w =  (cpu_hiaddr_lat_q[7] & !himem_vram_wr_lat_q);
-  assign select_hs_w = map_data_q[`MAP_HSCLK_EN_IDX] & (( vpa & vda & himem_w ) |
-			                                ((vpa | vda ) & himem_w & hs_selected_w) |
-			                                (!vpa & !vda & hs_selected_w)
-			                                ) ;
+  wire  hisync_w = vpa & vda & himem_w;
+  assign select_hs_w = map_data_q[`MAP_HSCLK_EN_IDX] & (( hisync_w ) |
+                                                        ((vpa | vda ) & himem_w & hs_selected_w) |
+                                                        (!vpa & !vda & hs_selected_w)
+                                                        ) ;
   assign dummy_access_w = (cpu_hiaddr_lat_q[7] & !himem_vram_wr_lat_q) | !ls_selected_w ;
-   
+  
   // ROM remapping
   always @ ( * )
     if (!cpu_data[7] & map_data_q[`MAP_ROM_IDX] & addr[15] & (vpa|vda))
@@ -187,11 +198,7 @@ module level1b_m (
   assign cpu_hiaddr_lat_d[0] = cpu_data[0] | native_mode_int_w;
   
   // drive cpu data if we're reading internal register or making a non dummy read from lomem
-  always @ ( cpu_ck_phi2_w or rnw or
-             cpld_reg_select_q or map_data_q or 
-             cpu_hiaddr_lat_q[7]
-             or bbc_data
-             or bbc_pagereg_q)
+  always @ ( * )
     if ( cpu_ck_phi2_w & rnw  )
       begin
 	if (cpu_hiaddr_lat_q[7])
@@ -200,7 +207,7 @@ module level1b_m (
           else //must be RAM access
             cpu_data_r = {8{1'bz}};
         else
-          cpu_data_r = bbc_data;
+          cpu_data_r = bbc_data_lat_q;
       end // if ( cpu_ck_phi1_w & rnw )   
     else 
       cpu_data_r = {8{1'bz}};
@@ -254,6 +261,15 @@ module level1b_m (
         cpu_hiaddr_lat_q <= cpu_hiaddr_lat_d;
         himem_vram_wr_lat_q <= himem_vram_wr_d;
       end
+
+  // Latches for the BBC data open during PHI2 to be stable beyond cycle end
+  always @ ( * )
+    if ( !bbc_ck2_phi1 )
+      bbc_data_lat_q <= bbc_data;
+  always @ ( * )
+    if ( cpu_ck_phi2_w )
+      cpu_data_lat_q <= cpu_data;
+
   
   
 endmodule // level1b_m
