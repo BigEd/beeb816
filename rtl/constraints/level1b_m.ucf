@@ -1,17 +1,17 @@
-NET "BBC_CK8" TNM_NET = BBC_CK8;
-TIMESPEC TS_BBC_CK8 = PERIOD "BBC_CK8" 100 ns HIGH 50%;
+NET "HSCLK" TNM_NET = HSCLK;
+TIMESPEC TS_HSCLK = PERIOD "HSCLK" 100 ns HIGH 50%;
 NET "BBC_CK2_PHI0" TNM_NET = BBC_CK2_PHI0;
 TIMESPEC TS_BBC_CK2_PHI0 = PERIOD "BBC_CK2_PHI0" 200 ns HIGH 50%;
-NET "*" OFFSET = OUT 45 ns AFTER "bbc_ck8" ;
+NET "*" OFFSET = OUT 45 ns AFTER "hsclk" ;
 NET "*" OFFSET = OUT 45 ns AFTER "bbc_ck2_phi2" ;
-NET "cpu_ck_phi2" OFFSET = OUT 23 ns AFTER "bbc_ck8" ;
+NET "cpu_ck_phi2" OFFSET = OUT 23 ns AFTER "hsclk" ;
 
 PIN "rdy" LOC = P1;
 PIN "cpu_e" LOC = P2;
 PIN "cpu_ck_phi2" LOC = P3;
 PIN "ram_ceb" LOC = P4;
 PIN "bbc_ck2_phi2" LOC = P5;
-PIN "bbc_ck8" LOC = P9;
+PIN "hsclk" LOC = P9;
 PIN "sda" LOC = P13;
 PIN "scl" LOC = P14;
 PIN "gpio[0]" LOC = P15;
