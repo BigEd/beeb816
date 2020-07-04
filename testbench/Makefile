@@ -12,7 +12,7 @@ VPATH = ./:../rtl
 SRC = ../rtl
 
 # Primary targets
-all : testbench.vcd
+all : testbench_phi1.vcd testbench_phi2.vcd
 
 clean:
 	\rm -rf build *.vcd *~ *exe *out
@@ -28,10 +28,14 @@ clean:
 ##	mv dump.vcd clkctrl2_tb_async_phi2.vcd
 ##
 
-testbench.vcd  : testbench.v ram_512kx8_m.v ram_64kx8_m.v level1b_m.v clkctrl.v 
-	iverilog -m testbench -o testbench.exe testbench.v ram_512kx8_m.v ram_64kx8_m.v  ${SRC}/level1b_m.v ${SRC}/clkctrl.v ${SRC}/as_edge_detect.v ${SRC}/s_edge_detect.v
-	./testbench.exe
-	mv dump.vcd testbench.vcd
+testbench_phi1.vcd  : testbench.v ram_512kx8_m.v ram_64kx8_m.v level1b_m.v clkctrl_phi1.v 
+	iverilog -m testbench -o testbench_phi1.exe testbench.v ram_512kx8_m.v ram_64kx8_m.v  ${SRC}/level1b_m.v ${SRC}/clkctrl_phi1.v
+	./testbench_phi1.exe
+	mv dump.vcd testbench_phi1.vcd
+testbench_phi2.vcd  : testbench.v ram_512kx8_m.v ram_64kx8_m.v level1b_m.v clkctrl_phi2.v 
+	iverilog -D STOP_ON_PHI2 -m testbench -o testbench_phi2.exe testbench.v ram_512kx8_m.v ram_64kx8_m.v  ${SRC}/level1b_m.v ${SRC}/clkctrl_phi2.v 
+	./testbench_phi2.exe
+	mv dump.vcd testbench_phi2.vcd
 
 
 gatesim.vcd  : testbench.v ram_512kx8_m.v ram_64kx8_m.v level1b_m.v 

@@ -6,8 +6,9 @@
 
 
 `define PIPE_SZ 2
+`define LONG_PIPE_SZ 8
 
-module clkctrl(
+module clkctrl_phi2(
                input       hsclk_in,
                input       lsclk_in,
                input       rst_b,
@@ -22,13 +23,14 @@ module clkctrl(
   reg                     cpuclk_r;
   reg                     hs_enable_q, ls_enable_q;
   reg                     selected_ls_q, selected_hs_q;
-  reg [`PIPE_SZ-1:0]      pipe_retime_ls_enable_q;
+  reg [`LONG_PIPE_SZ-1:0]      pipe_retime_ls_enable_q;
   reg [`PIPE_SZ-1:0]      pipe_retime_hs_enable_q;
 
   wire                    retimed_ls_enable_w = pipe_retime_ls_enable_q[0];
   wire                    retimed_hs_enable_w = pipe_retime_hs_enable_q[0];
 
   assign clkout = (cpuclk_r & hs_enable_q ) | (lsclk_in & ls_enable_q);
+
   assign lsclk_selected = selected_ls_q;
   assign hsclk_selected = selected_hs_q;
 
@@ -68,11 +70,11 @@ module clkctrl(
 
   always @ ( negedge  cpuclk_r or posedge ls_enable_q or negedge rst_b )
     if ( ! rst_b )
-      pipe_retime_ls_enable_q <= {`PIPE_SZ{1'b1}};
+      pipe_retime_ls_enable_q <= {`LONG_PIPE_SZ{1'b1}};
     else if ( ls_enable_q )
-      pipe_retime_ls_enable_q <= {`PIPE_SZ{1'b1}};
+      pipe_retime_ls_enable_q <= {`LONG_PIPE_SZ{1'b1}};
     else
-      pipe_retime_ls_enable_q <= {1'b0, pipe_retime_ls_enable_q[`PIPE_SZ-1:1]};
+      pipe_retime_ls_enable_q <= {1'b0, pipe_retime_ls_enable_q[`LONG_PIPE_SZ-1:1]};
 
   always @ ( negedge  lsclk_in or posedge hs_enable_q or negedge rst_b )
     if ( ! rst_b )

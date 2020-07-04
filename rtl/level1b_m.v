@@ -1,18 +1,24 @@
 `timescale 1ns / 1ns
 
-// Interrupts are not handled in '816 mode
+// Define this to determine stopping clock state with PHI2 high, default is PHI1 high
+// `define STOP_ON_PHI2 1
+
+// Interrupts are not handled in '816 mode so leave this undefined for now
+//`ifdef REMAP_NATIVE_INTERRUPTS_D
 
 
 // Use data latches on CPU2BBC and/or BBC2CPU data transfers to improve hold times
 `define USE_DATA_LATCHES_BBC2CPU 1
 `define USE_DATA_LATCHES_CPU2BBC 1
 
+// Latch the dummy_access signal to avoid glitches
+`define LATCH_DUMMY_ACCESS 1
+
 // RAM_MAPPED_ON_BOOT_D allows the CPLD to boot with the RAM mapping already
 // enabled. This won't work with systems like the Oric which have IO space
 // at the bottom of the address map, but is generally ok for the BBC and may
 // fix Ed's flakey BBC.
-
-//`define RAM_MAPPED_ON_BOOT_D 1
+`define RAM_MAPPED_ON_BOOT_D 1
 
 `define MAP_CC_DATA_SZ     7
 `define MAP_HSCLK_EN_IDX   6
@@ -80,6 +86,8 @@ module level1b_m (
   reg                                  himem_vram_wr_lat_q;
   reg                                  remapped_rom_access_r ;
   reg                                  remapped_ram_access_r ;
+  reg                                  dummy_access_lat_q;
+  reg                                  hisync_q;
 
   wire [ `CPLD_REG_SEL_SZ-1:0]         cpld_reg_select_d;
   wire [7:0]                           cpu_hiaddr_lat_d;
@@ -94,7 +102,8 @@ module level1b_m (
   wire                                 hs_clk_w;
   wire                                 native_mode_int_w;
   wire                                 himem_w;
-
+  wire                                 hisync_w;
+                                 
   // Force keep intermediate nets to preserve strict delay chain for clocks
   (* KEEP="TRUE" *) wire ckdel_1_b, ckdel_3_b;
   (* KEEP="TRUE" *) wire ckdel_2, ckdel_4;
@@ -111,24 +120,35 @@ module level1b_m (
   INV    ckdel7   ( .I(cpuckdel_2),   .O(cpuckdel_3_b));
   INV    ckdel8   ( .I(cpuckdel_3_b), .O(cpuckdel_4));
 
-  clkctrl U_0 (
-               .hsclk_in(hsclk),
-               .lsclk_in(ckdel_3_b),
-               .rst_b(resetb),
-               .hsclk_sel(select_hs_w),
-               .cpuclk_div_sel(map_data_q[`CLK_CPUCLK_DIV_IDX_HI:`CLK_CPUCLK_DIV_IDX_LO]),
-               .hsclk_selected(hs_selected_w),
-               .lsclk_selected(ls_selected_w),
-               .clkout(cpu_ck_phi1_w)
-               );
-
+`ifdef STOP_ON_PHI2  
+  clkctrl_phi2 U_0 (
+                    .hsclk_in(hsclk),
+                    .lsclk_in(ckdel_3_b),
+                    .rst_b(resetb),
+                    .hsclk_sel(select_hs_w),
+                    .cpuclk_div_sel(map_data_q[`CLK_CPUCLK_DIV_IDX_HI:`CLK_CPUCLK_DIV_IDX_LO]),
+                    .hsclk_selected(hs_selected_w),
+                    .lsclk_selected(ls_selected_w),
+                    .clkout(cpu_ck_phi1_w)
+                    );  
   assign cpu_ck_phi2_w = !cpu_ck_phi1_w ;
   assign cpu_ck_phi2 =  cpu_ck_phi2_w ;
-//  assign bbc_ck2_phi1 = cpu_ck_phi1_w;
-//  assign bbc_ck2_phi2 = !cpu_ck_phi1_w;
+`else
+  clkctrl_phi1 U_0 (
+                    .hsclk_in(hsclk),
+                    .lsclk_in(ckdel_4),
+                    .rst_b(resetb),
+                    .hsclk_sel(select_hs_w),
+                    .cpuclk_div_sel(map_data_q[`CLK_CPUCLK_DIV_IDX_HI:`CLK_CPUCLK_DIV_IDX_LO]),
+                    .hsclk_selected(hs_selected_w),
+                    .lsclk_selected(ls_selected_w),
+                    .clkout(cpu_ck_phi2_w)
+                    );  
+  assign cpu_ck_phi2 =  cpu_ck_phi2_w ;
+  assign cpu_ck_phi1_w = !cpu_ck_phi2_w ;
+`endif  
   assign bbc_ck2_phi1 = ckdel_3_b;
-  assign bbc_ck2_phi2 = ckdel_4;
-
+  assign bbc_ck2_phi2 = ckdel_4;   
   assign bbc_sync = vpa & vda;
   assign rdy = 1'bz;
   assign irqb = 1'bz;
@@ -159,29 +179,33 @@ module level1b_m (
   assign cpld_reg_select_d[`CPLD_REG_SEL_MAP_CC_IDX] = vda && ( cpu_data[7:6]== 2'b10) && ( addr[1:0] == 2'b11);
   assign cpld_reg_select_d[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = vda && (cpu_data[7]== 1'b0) && ( addr == `BBC_PAGED_ROM_SEL );
   // Force dummy read access when accessing himem explicitly but not for remapped RAM accesses which can still complete
-
+`ifdef LATCH_DUMMY_ACCESS
+  assign { bbc_addr15, bbc_addr14 } = ( dummy_access_lat_q ) ? { 2'b10 } : { addr[15], addr[14] } ;
+  assign bbc_rnw = rnw | dummy_access_lat_q ;
+`else
   assign { bbc_addr15, bbc_addr14 } = ( dummy_access_w ) ? { 2'b10 } : { addr[15], addr[14] } ;
   assign bbc_rnw = rnw | dummy_access_w ;
+`endif
 `ifdef USE_DATA_LATCHES_CPU2BBC
-  assign bbc_data = ( !bbc_rnw & cpu_ck_phi2_w ) ? cpu_data_lat_q : { 8{1'bz}};
+  assign bbc_data = ( !bbc_rnw & bbc_ck2_phi2 & !hs_selected_w) ? cpu_data_lat_q : { 8{1'bz}};
 `else
-  assign bbc_data = ( !bbc_rnw & cpu_ck_phi2_w ) ? cpu_data : { 8{1'bz}};
+  assign bbc_data = ( !bbc_rnw & bbc_ck2_phi2 & !hs_selected_w) ? cpu_data : { 8{1'bz}};
 `endif
   assign cpu_data = cpu_data_r;
 
   // Assume only lowest 8K of RAM is not used for video
-  assign himem_vram_wr_d = !cpu_data[7] & (map_data_q[`MAP_RAM_IDX] & !addr[15] & (addr[14]|addr[13]) & !rnw & (vpa|vda)) ;
+  assign himem_vram_wr_d = !cpu_data[7] & !addr[15] & (addr[14]|addr[13]) & !rnw & (vpa|vda) ;
   // Select the high speed clock only
   // * on valid instruction fetches from himem, or
   // * on valid imm/data fetches from himem _if_ hs clock is already selected, or
   // * on invalid bus cycles if hs clock is already selected
   assign himem_w =  (cpu_hiaddr_lat_q[7] & !himem_vram_wr_lat_q);
-  wire  hisync_w = vpa & vda & himem_w;
-  assign select_hs_w = map_data_q[`MAP_HSCLK_EN_IDX] & (( hisync_w ) |
+  assign hisync_w = vpa & vda & himem_w;
+  assign select_hs_w = map_data_q[`MAP_HSCLK_EN_IDX] & (( hisync_w & hisync_q) |
                                                         ((vpa | vda ) & himem_w & hs_selected_w) |
                                                         (!vpa & !vda & hs_selected_w)
                                                         ) ;
-  assign dummy_access_w = (cpu_hiaddr_lat_q[7] & !himem_vram_wr_lat_q) | !ls_selected_w ;
+  assign dummy_access_w = himem_w | select_hs_w | !ls_selected_w ;
 
   // ROM remapping
   always @ ( * )
@@ -211,7 +235,7 @@ module level1b_m (
 
   // drive cpu data if we're reading internal register or making a non dummy read from lomem
   always @ ( * )
-    if ( cpu_ck_phi2_w & rnw  )
+    if ( cpu_ck_phi2_w & rnw )
       begin
 	if (cpu_hiaddr_lat_q[7])
 	  if ( cpld_reg_select_q[`CPLD_REG_SEL_MAP_CC_IDX]  )
@@ -224,7 +248,7 @@ module level1b_m (
 `else
           cpu_data_r = bbc_data;
 `endif
-      end // if ( cpu_ck_phi1_w & rnw )
+      end
     else
       cpu_data_r = {8{1'bz}};
 
@@ -233,16 +257,15 @@ module level1b_m (
   // -------------------------------------------------------------
 
   // Internal registers update on the rising edge of cpu_ck_phi1
-  always @ ( posedge cpu_ck_phi1_w or negedge resetb )
+  always @ ( negedge cpu_ck_phi2_w or negedge resetb )
     if ( !resetb )
       begin
 `ifdef RAM_MAPPED_ON_BOOT_D
-        map_data_q[`MAP_ROM_IDX]      <= 1'b0;
-        map_data_q[`MAP_RAM_IDX]      <= 1'b1;
-        map_data_q[`CLK_HSCLK_EN_IDX] <= 1'b0;
-        map_data_q[`CLK_HSCLK_INV_IDX]<= 1'b0;
-        map_data_q[`CLK_DIV_EN_IDX]   <= 1'b0;
-        map_data_q[`CLK_DIV4NOT2_IDX] <= 1'b0;
+        map_data_q[`MAP_ROM_IDX]           <= 1'b0;
+        map_data_q[`MAP_RAM_IDX]           <= 1'b1;
+        map_data_q[`MAP_HSCLK_EN_IDX]      <= 1'b0;
+        map_data_q[`CLK_CPUCLK_DIV_IDX_LO] <= 1'b0;
+        map_data_q[`CLK_CPUCLK_DIV_IDX_HI] <= 1'b0;
 `else
         map_data_q <= {`MAP_CC_DATA_SZ{1'b0}};
 `endif
@@ -258,12 +281,17 @@ module level1b_m (
 
 
   // Flop all the internal register select bits on falling edge of phi1
-  // for use on rising edge of phi2
-  always @ ( negedge cpu_ck_phi1_w or negedge resetb )
+  always @ ( posedge cpu_ck_phi2_w or negedge resetb )
     if ( !resetb )
-      cpld_reg_select_q = { `CPLD_REG_SEL_SZ{1'b0}};
+      begin
+        cpld_reg_select_q <= {`CPLD_REG_SEL_SZ{1'b0}};
+        hisync_q <= 1'b0;
+      end
     else
-      cpld_reg_select_q = cpld_reg_select_d ;
+      begin
+        cpld_reg_select_q <= cpld_reg_select_d ;
+        hisync_q <= (vda & vpa ) ? hisync_w : hisync_q;
+      end // else: !if(cpld_reg_select_q[`CPLD_REG_SEL_BBC_PAGEREG_IDX] & !rnw )
 
   // Latches for the high address bits open during PHI1
   always @ ( * )
@@ -272,11 +300,17 @@ module level1b_m (
         cpu_hiaddr_lat_q <= 8'b0;
         himem_vram_wr_lat_q <= 1'b0;
       end
-    else if ( cpu_ck_phi1_w )
+    else if ( !cpu_ck_phi2_w )
       begin
         cpu_hiaddr_lat_q <= cpu_hiaddr_lat_d;
         himem_vram_wr_lat_q <= himem_vram_wr_d;
       end
+
+`ifdef LATCH_DUMMY_ACCESS
+  always @ ( * )
+    if ( bbc_ck2_phi1 )
+      dummy_access_lat_q <= dummy_access_w;
+`endif
 
 `ifdef USE_DATA_LATCHES_BBC2CPU
   // Latches for the BBC data open during PHI2 to be stable beyond cycle end
