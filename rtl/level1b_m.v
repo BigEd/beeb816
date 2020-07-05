@@ -11,14 +11,11 @@
 `define USE_DATA_LATCHES_BBC2CPU 1
 `define USE_DATA_LATCHES_CPU2BBC 1
 
-// Latch the dummy_access signal to avoid glitches
-`define LATCH_DUMMY_ACCESS 1
-
 // RAM_MAPPED_ON_BOOT_D allows the CPLD to boot with the RAM mapping already
 // enabled. This won't work with systems like the Oric which have IO space
 // at the bottom of the address map, but is generally ok for the BBC and may
 // fix Ed's flakey BBC.
-`define RAM_MAPPED_ON_BOOT_D 1
+//`define RAM_MAPPED_ON_BOOT_D 1
 
 `define MAP_CC_DATA_SZ     7
 `define MAP_HSCLK_EN_IDX   6
@@ -103,7 +100,7 @@ module level1b_m (
   wire                                 native_mode_int_w;
   wire                                 himem_w;
   wire                                 hisync_w;
-                                 
+
   // Force keep intermediate nets to preserve strict delay chain for clocks
   (* KEEP="TRUE" *) wire ckdel_1_b, ckdel_3_b;
   (* KEEP="TRUE" *) wire ckdel_2, ckdel_4;
@@ -120,7 +117,7 @@ module level1b_m (
   INV    ckdel7   ( .I(cpuckdel_2),   .O(cpuckdel_3_b));
   INV    ckdel8   ( .I(cpuckdel_3_b), .O(cpuckdel_4));
 
-`ifdef STOP_ON_PHI2  
+`ifdef STOP_ON_PHI2
   clkctrl_phi2 U_0 (
                     .hsclk_in(hsclk),
                     .lsclk_in(ckdel_3_b),
@@ -130,7 +127,7 @@ module level1b_m (
                     .hsclk_selected(hs_selected_w),
                     .lsclk_selected(ls_selected_w),
                     .clkout(cpu_ck_phi1_w)
-                    );  
+                    );
   assign cpu_ck_phi2_w = !cpu_ck_phi1_w ;
   assign cpu_ck_phi2 =  cpu_ck_phi2_w ;
 `else
@@ -143,20 +140,24 @@ module level1b_m (
                     .hsclk_selected(hs_selected_w),
                     .lsclk_selected(ls_selected_w),
                     .clkout(cpu_ck_phi2_w)
-                    );  
+                    );
   assign cpu_ck_phi2 =  cpu_ck_phi2_w ;
   assign cpu_ck_phi1_w = !cpu_ck_phi2_w ;
-`endif  
+`endif
   assign bbc_ck2_phi1 = ckdel_3_b;
-  assign bbc_ck2_phi2 = ckdel_4;   
+  assign bbc_ck2_phi2 = ckdel_4;
   assign bbc_sync = vpa & vda;
   assign rdy = 1'bz;
   assign irqb = 1'bz;
   assign nmib = 1'bz;
-  assign sda = 1'bz;
-  assign scl = 1'bz;
+  assign sda = bbc_ck2_phi0 ;
+  assign scl = cpu_ck_phi2_w;
   // Bring out signals for observation on GPIO
-  assign gpio = {`GPIO_SZ{1'bz}};
+`ifdef LATCH_DUMMY_ACCESS
+  assign gpio = { 5'bz, select_hs_w, bbc_rnw};
+`else
+  assign gpio = { 5'bz, select_hs_w, dummy_access_w};
+`endif
 
 `ifdef REMAP_NATIVE_INTERRUPTS_D
   // Native mode interrupts will be redirected to himem
@@ -205,6 +206,7 @@ module level1b_m (
                                                         ((vpa | vda ) & himem_w & hs_selected_w) |
                                                         (!vpa & !vda & hs_selected_w)
                                                         ) ;
+
   assign dummy_access_w = himem_w | select_hs_w | !ls_selected_w ;
 
   // ROM remapping
@@ -295,22 +297,15 @@ module level1b_m (
 
   // Latches for the high address bits open during PHI1
   always @ ( * )
-    if ( ! resetb )
-      begin
-        cpu_hiaddr_lat_q <= 8'b0;
-        himem_vram_wr_lat_q <= 1'b0;
-      end
-    else if ( !cpu_ck_phi2_w )
+    if ( !cpu_ck_phi2_w )
       begin
         cpu_hiaddr_lat_q <= cpu_hiaddr_lat_d;
         himem_vram_wr_lat_q <= himem_vram_wr_d;
       end
 
-`ifdef LATCH_DUMMY_ACCESS
   always @ ( * )
-    if ( bbc_ck2_phi1 )
+    if ( cpu_ck_phi1_w )
       dummy_access_lat_q <= dummy_access_w;
-`endif
 
 `ifdef USE_DATA_LATCHES_BBC2CPU
   // Latches for the BBC data open during PHI2 to be stable beyond cycle end

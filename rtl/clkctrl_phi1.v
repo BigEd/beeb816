@@ -2,10 +2,6 @@
 // Switch between async clocks when both are low.
 //
 
-// Set this to ensure that the PHI1 is at least as long as the LS clk PHI1 when switching away from
-// LS clk to HS clk. It shouldn't matter if LS clk PHI1 is cut short as this is going to be a dummy
-// access anyway. Seems to make no difference to reliability anyway.
-`define LONG_LS_PHI1_TO_HS_PHI1   1
 `define PIPE_SZ 2
 
 module clkctrl_phi1(
@@ -23,9 +19,7 @@ module clkctrl_phi1(
   reg                     cpuclk_r;
   reg                     hs_enable_lat_q, ls_enable_lat_q;
 
-`ifdef LONG_LS_PHI1_TO_HS_PHI1
   reg                     ls_enable_q;
-`endif
   reg                     selected_hs_q;
   reg [`PIPE_SZ-1:0]      pipe_retime_ls_enable_q;
   reg [`PIPE_SZ-1:0]      pipe_retime_hs_enable_q;
@@ -65,24 +59,17 @@ module clkctrl_phi1(
     else
       selected_hs_q <= hsclk_sel & retimed_hs_enable_w;
 
-`ifdef LONG_LS_PHI1_TO_HS_PHI1  
   always @ ( negedge lsclk_in or negedge rst_b )
     if (! rst_b )
       ls_enable_q  <= 1'b1;
     else
       ls_enable_q <= ls_enable_lat_q;  
-`endif
   
   always @ ( negedge  cpuclk_r or negedge rst_b )
     if ( ! rst_b )
       pipe_retime_hs_enable_q <= {`PIPE_SZ{1'b0}};
     else
-`ifdef LONG_LS_PHI1_TO_HS_PHI1      
-      pipe_retime_hs_enable_q <= {hsclk_sel & !ls_enable_q ,  pipe_retime_hs_enable_q[1]};
-`else    
-      pipe_retime_hs_enable_q <= {hsclk_sel & !ls_enable_lat_q ,  pipe_retime_hs_enable_q[1]};
-`endif
-    
+      pipe_retime_hs_enable_q <= {hsclk_sel & !ls_enable_q ,  pipe_retime_hs_enable_q[1]};    
 
   always @ ( negedge  lsclk_in or negedge rst_b )
     if ( ! rst_b )
