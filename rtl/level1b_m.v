@@ -153,11 +153,7 @@ module level1b_m (
   assign sda = bbc_ck2_phi0 ;
   assign scl = cpu_ck_phi2_w;
   // Bring out signals for observation on GPIO
-`ifdef LATCH_DUMMY_ACCESS
   assign gpio = { 5'bz, select_hs_w, bbc_rnw};
-`else
-  assign gpio = { 5'bz, select_hs_w, dummy_access_w};
-`endif
 
 `ifdef REMAP_NATIVE_INTERRUPTS_D
   // Native mode interrupts will be redirected to himem
@@ -180,13 +176,8 @@ module level1b_m (
   assign cpld_reg_select_d[`CPLD_REG_SEL_MAP_CC_IDX] = vda && ( cpu_data[7:6]== 2'b10) && ( addr[1:0] == 2'b11);
   assign cpld_reg_select_d[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = vda && (cpu_data[7]== 1'b0) && ( addr == `BBC_PAGED_ROM_SEL );
   // Force dummy read access when accessing himem explicitly but not for remapped RAM accesses which can still complete
-`ifdef LATCH_DUMMY_ACCESS
   assign { bbc_addr15, bbc_addr14 } = ( dummy_access_lat_q ) ? { 2'b10 } : { addr[15], addr[14] } ;
   assign bbc_rnw = rnw | dummy_access_lat_q ;
-`else
-  assign { bbc_addr15, bbc_addr14 } = ( dummy_access_w ) ? { 2'b10 } : { addr[15], addr[14] } ;
-  assign bbc_rnw = rnw | dummy_access_w ;
-`endif
 `ifdef USE_DATA_LATCHES_CPU2BBC
   assign bbc_data = ( !bbc_rnw & bbc_ck2_phi2 & !hs_selected_w) ? cpu_data_lat_q : { 8{1'bz}};
 `else
