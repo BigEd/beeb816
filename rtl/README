@@ -1,8 +1,6 @@
 #!/bin/bash
-
-
-# ./README [xc9572|xc95108]
-
+# ./README [xc9572|xc95108] [$defines]
+design=level1b_m
 
 if [ $# -lt 1 ]; then
     target=xc95108
@@ -10,13 +8,11 @@ else
     target=$1
 fi
 
-
 if [ $# -lt 2 ]; then
     defines=""
 else
     defines=$2
 fi
-
 
 echo "Building for $target"
 
@@ -24,11 +20,11 @@ BUILD_SCR=../scripts/build.py
 
 ${BUILD_SCR}  \
        -a "xst: -define { $defines }"  \
-       -m level1b_m \
+       -m ${design} \
        -d build_${target}_p3_ff \
        -f -t ${target}-15-pc84  \
-       -c constraints/level1b_m.ucf -o speed
-mv build_${target}_p3_ff/level1b_m.jed ./level1b_m_${defines}.jed
+       -c constraints/${design}.ucf -o speed
+mv build_${target}_p3_ff/${design}.jed ./${design}_${defines}.jed
 
 
 

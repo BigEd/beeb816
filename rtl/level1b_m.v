@@ -1,11 +1,10 @@
 `timescale 1ns / 1ns
 
 // Define this to determine stopping clock state with PHI2 high, default is PHI1 high
-// `define STOP_ON_PHI2 1
+//`define STOP_ON_PHI2 1
 
 // Interrupts are not handled in '816 mode so leave this undefined for now
 //`ifdef REMAP_NATIVE_INTERRUPTS_D
-
 
 // Use data latches on CPU2BBC and/or BBC2CPU data transfers to improve hold times
 `define USE_DATA_LATCHES_BBC2CPU 1
@@ -83,7 +82,10 @@ module level1b_m (
   reg                                  himem_vram_wr_lat_q;
   reg                                  remapped_rom_access_r ;
   reg                                  remapped_ram_access_r ;
+
+`ifndef STOP_ON_PHI2  
   reg                                  dummy_access_lat_q;
+`endif  
   reg                                  hisync_q;
 
   wire [ `CPLD_REG_SEL_SZ-1:0]         cpld_reg_select_d;
@@ -176,8 +178,15 @@ module level1b_m (
   assign cpld_reg_select_d[`CPLD_REG_SEL_MAP_CC_IDX] = vda && ( cpu_data[7:6]== 2'b10) && ( addr[1:0] == 2'b11);
   assign cpld_reg_select_d[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = vda && (cpu_data[7]== 1'b0) && ( addr == `BBC_PAGED_ROM_SEL );
   // Force dummy read access when accessing himem explicitly but not for remapped RAM accesses which can still complete
+
+`ifdef STOP_ON_PHI2  
+  assign { bbc_addr15, bbc_addr14 } = ( dummy_access_w ) ? { 2'b10 } : { addr[15], addr[14] } ;
+  assign bbc_rnw = rnw | dummy_access_w ;
+`else
   assign { bbc_addr15, bbc_addr14 } = ( dummy_access_lat_q ) ? { 2'b10 } : { addr[15], addr[14] } ;
   assign bbc_rnw = rnw | dummy_access_lat_q ;
+`endif
+  
 `ifdef USE_DATA_LATCHES_CPU2BBC
   assign bbc_data = ( !bbc_rnw & bbc_ck2_phi2 & !hs_selected_w) ? cpu_data_lat_q : { 8{1'bz}};
 `else
@@ -294,9 +303,11 @@ module level1b_m (
         himem_vram_wr_lat_q <= himem_vram_wr_d;
       end
 
+`ifndef STOP_ON_PHI2  
   always @ ( * )
     if ( cpu_ck_phi1_w )
       dummy_access_lat_q <= dummy_access_w;
+`endif  
 
 `ifdef USE_DATA_LATCHES_BBC2CPU
   // Latches for the BBC data open during PHI2 to be stable beyond cycle end
