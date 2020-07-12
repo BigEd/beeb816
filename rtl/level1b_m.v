@@ -195,7 +195,7 @@ module level1b_m (
   assign cpu_data = cpu_data_r;
 
   // Assume only lowest 8K of RAM is not used for video
-  assign himem_vram_wr_d = !cpu_data[7] & !addr[15] & (addr[14]|addr[13]) & !rnw & (vpa|vda) ;
+  assign himem_vram_wr_d = !cpu_data[7] & !addr[15] & (addr[14]|addr[13]) & !rnw & vda ;
   // Select the high speed clock only
   // * on valid instruction fetches from himem, or
   // * on valid imm/data fetches from himem _if_ hs clock is already selected, or

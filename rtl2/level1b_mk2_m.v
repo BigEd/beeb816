@@ -7,10 +7,10 @@
 
 // Use data latches on CPU2BBC and/or BBC2CPU data transfers to improve hold times
 `define USE_DATA_LATCHES_BBC2CPU 1
-`define USE_DATA_LATCHES_CPU2BBC 1
+//`define USE_DATA_LATCHES_CPU2BBC 1
 
 // Enable internal GPIO register
-// `define ENABLE_GPIO_REG  1
+`define ENABLE_GPIO_REG  1
 
 
 // RAM_MAPPED_ON_BOOT_D allows the CPLD to boot with the RAM mapping already
@@ -26,7 +26,7 @@
 `define CLK_CPUCLK_DIV_IDX_HI  1
 `define CLK_CPUCLK_DIV_IDX_LO  0
 `define BBC_PAGEREG_SZ         4    // only the bottom four ROM selection bits
-`define GPIO_SZ                4
+`define GPIO_SZ                6
 
 `ifdef ENABLE_GPIO_REG
  `define CPLD_REG_SEL_SZ        4
@@ -198,7 +198,8 @@ module level1b_mk2_m (
 `endif
   assign cpu_data = cpu_data_r;
 
-  assign himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & (cpu_adr[14]|cpu_adr[13]) & !cpu_rnw & (cpu_vpa|cpu_vda) ;
+  // NO need to check VPA here because writes will only be asserting VDA
+  assign himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & (cpu_adr[14]|cpu_adr[13]) & !cpu_rnw & cpu_vda ;  
   // Sel the high speed clock only
   // * on valid instruction fetches from himem, or
   // * on valid imm/data fetches from himem _if_ hs clock is already selected, or
@@ -206,9 +207,9 @@ module level1b_mk2_m (
   assign himem_w =  (cpu_hiaddr_lat_q[7] & !himem_vram_wr_lat_q);
   assign hisync_w = cpu_vpa & cpu_vda & himem_w;
   assign sel_hs_w = map_data_q[`MAP_HSCLK_EN_IDX] & (( hisync_w & hisync_q) |
-                                                        ((cpu_vpa | cpu_vda ) & himem_w & hs_selected_w) |
-                                                        (!cpu_vpa & !cpu_vda & hs_selected_w)
-                                                        ) ;
+                                                     ((cpu_vpa | cpu_vda ) & himem_w & hs_selected_w) |
+                                                     (!cpu_vpa & !cpu_vda & hs_selected_w)
+                                                     ) ;
 
   assign dummy_access_w = himem_w | sel_hs_w | !ls_selected_w ;
 
@@ -289,6 +290,10 @@ module level1b_mk2_m (
         map_data_q <= {`MAP_CC_DATA_SZ{1'b0}};
 `endif
         bbc_pagereg_q <= {`BBC_PAGEREG_SZ{1'b0}};
+`ifdef ENABLE_GPIO_REG
+         gpio_reg_dir_q <= `GPIO_SZ'b0;
+         gpio_reg_data_q <= `GPIO_SZ'b0;         
+`endif         
       end
     else
       begin
@@ -315,7 +320,8 @@ module level1b_mk2_m (
     else
       begin
         cpld_reg_sel_q <= cpld_reg_sel_d ;
-        hisync_q <= (cpu_vda & cpu_vpa ) ? hisync_w : hisync_q;
+        // Zero hisync_q on any non-hs cycle, and set it only after a successful hisync
+        hisync_q <= (!sel_hs_w) ? 1'b0 : (cpu_vda & cpu_vpa ) ? hisync_w : hisync_q;
       end
 
   // Latches for the high address bits open during PHI1
