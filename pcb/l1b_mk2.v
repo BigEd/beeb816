@@ -4,10 +4,10 @@
 // Netlist for L1B PCB layout.
 //
 // ----------------------------------------------------------------------
-// (C) 2009 Ed & Rich
+// (C) 2009,2020 Ed & Rich
 // ----------------------------------------------------------------------
 
-module l1b_mk1();
+module l1b_mk2();
 
    // Wires declared as supply* will default to wide routing
    // when parsed through netlister.py
@@ -92,20 +92,20 @@ module l1b_mk1();
   bs62lv4006  SRAM (
                     .a18(ram_a18),  .vcc(VDD),
                     .a16(ram_a16),  .a15(cpu_a15),
-                    .a14(cpu_a14),  .a17(ram_a17),
+                    .a14(cpu_a14),  .a17(ram_a17), // A17=CE2 on 128KB RAMs
                     .a12(cpu_a13),  .web(ram_web),
                     .a7(cpu_a12),   .a13(cpu_a0),
                     .a6(cpu_a11),   .a8(cpu_a1),
                     .a5(cpu_a10),   .a9(cpu_a2),
-                    .a4(cpu_a9),    .a11(cpu_a3),
-                    .a3(cpu_a4),    .oeb(ram_ceb),
-                    .a2(cpu_a8),    .a10(cpu_a5),
-                    .a1(cpu_a7),    .csb(ram_ceb),
-                    .a0(cpu_a6 ),   .d7(cpu_d0),
-                    .d0(cpu_d1),    .d6(cpu_d2),
-                    .d1(cpu_d3),    .d5(cpu_d4),
-                    .d2(cpu_d5),    .d4(cpu_d6),
-                    .vss(VSS),      .d3(cpu_d7)
+                    .a4(cpu_a4),    .a11(cpu_a3),
+                    .a3(cpu_a9),    .oeb(ram_ceb),
+                    .a2(cpu_a6),    .a10(cpu_a5),
+                    .a1(cpu_a6),    .csb(ram_ceb),
+                    .a0(cpu_a7 ),   .d7(cpu_d7),
+                    .d0(cpu_d6),    .d6(cpu_d5),
+                    .d1(cpu_d4),    .d5(cpu_d3),
+                    .d2(cpu_d2),    .d4(cpu_d1),
+                    .vss(VSS),      .d3(cpu_d0)
                     );
 
    // L1B CPLD in PLCC84 pin socket (can be 9572 or 95108)
@@ -122,23 +122,23 @@ module l1b_mk1();
 		      .gnd1(VSS),
 		      .gck1(hsclk),
 		      .gck2(bbc_phi0),
-		      .p11(bbc_phi2),
+		      .p11(bbc_phi1),
 
                       // TOP
-		      .gck3(bbc_phi1),
-		      .p13(rdy),
-		      .p14(gpio5),
-		      .p15(gpio4),
+		      .gck3(),
+		      .p13(bbc_phi2),
+		      .p14(rdy),
+		      .p15(gpio5),
 		      .gnd2(VSS),
-		      .p17(gpio3),
-		      .p18(gpio2),
-		      .p19(gpio1),
-		      .p20(gpio0),
-		      .p21(ram_a18),
+		      .p17(gpio4),
+		      .p18(gpio3),
+		      .p19(gpio2),
+		      .p20(gpio1),
+		      .p21(gpio0),
 		      .vccio1(VDD),
-		      .p23(ram_a17),
-		      .p24(ram_a16),
-		      .p25(ram_ceb),
+		      .p23(ram_a18),
+		      .p24(ram_a17),
+		      .p25(ram_a16),
 		      .p26(ram_web),
 		      .gnd3(VSS),
 		      .tdi(tdi),
@@ -165,7 +165,7 @@ module l1b_mk1();
 		      .p47(cpu_d6),
 		      .p48(cpu_d7),
 		      .gnd5(VSS),
-		      .p50(),
+		      .p50(ram_ceb),
 		      .p51(cpu_a15),
 		      .p52(cpu_a14),
 		      .p53(cpu_a13),

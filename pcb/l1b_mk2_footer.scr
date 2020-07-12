@@ -9,8 +9,8 @@ Wire 0  (0 0) (4.0 3.2) (0 0);
 Layer Top;
 
 # PCB-Pool/PCB-Train design rule is actually 0.006/0.006 for wires
-CLASS 0 signal 0.010 0.010
-CLASS 1 supply 0.020 0.010
+CLASS 0 signal 0.010 0.010 ;
+CLASS 1 supply 0.024 0.012 ;
 
 ROTATE =R180  C100N_1 ;
 ROTATE =R0    C100N_2 ;
@@ -58,10 +58,10 @@ MIRROR C100N_11;
 Layer tPlace ;
 CHANGE FONT PROPORTIONAL ;
 CHANGE SIZE 0.06 ;
-TEXT 'Beeb816 Revival! L1B Mk2' R0 (0.1 0.35) ;
+TEXT 'Beeb816 Revival! L1B Mk2' R0 (0.1 0.25) ;
 CHANGE SIZE 0.04 ;
-TEXT '(C) 2009, 2020 Revaldinho, BigEd'  R0 (0.1 0.26) ;
-TEXT 'http://github.com/BigEd/beeb816'  R0 (0.1 0.18) ;
+TEXT '(C) 2009, 2020 Revaldinho, BigEd'  R0 (0.1 0.16) ;
+TEXT 'http://github.com/BigEd/beeb816'  R0 (0.1 0.08) ;
 
 Window Fit;
 
@@ -75,13 +75,9 @@ wire  0.030;
 wire  'VDD' (0.03 0.03) ( 3.97 0.03) (3.97 3.17) (0.03 3.17) (0.03 0.03);
 wire  0.025;
 wire  'VDD' (1.20 2.60) (1.20 1.75);
-wire  0.025;
-wire  'VSS' (1.55 0.55) (1.55 0.2);
 layer bottom;
 wire  0.030;
 wire  'VSS' (0.03 0.03) ( 3.97 0.03) (3.97 3.17) (0.03 3.17) (0.03 0.03);
-wire  0.025;
-wire  'VSS' (1.55 0.2) (2.15 0.2);
 wire  0.015;
 wire  'hsclk' (1.4 3.05) (1.55 2.90) (1.55 2.75 ) (3.40 2.75) ;
 
