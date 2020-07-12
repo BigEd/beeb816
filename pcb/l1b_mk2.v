@@ -26,9 +26,9 @@ module l1b_mk1();
    wire    bbc_rnw, cpu_rnw, ram_web ;
    wire    ram_a16, ram_a17, ram_a18;
    wire    ram_ceb;
-   wire     lat_en;
+   wire    lat_en;
    wire    rdy, bbc_sync;
-   wire    bbc_phi0, bbc_phi1, bbc_phi2, hsclk, cpu_ck_phi2;
+   wire    bbc_phi0, bbc_phi1, bbc_phi2, hsclk, cpu_phi2;
    wire    tdo, tdi, tck, tms;
    wire    gpio0, gpio1, gpio2, gpio3, gpio4, gpio5;
 
@@ -40,7 +40,9 @@ module l1b_mk1();
    cap100nf c100n_3 (.p0( VDD ), .p1( VSS ));
    cap100nf c100n_4 (.p0( VSS ), .p1( VDD ));
    cap100nf c100n_5 (.p0( VSS ), .p1( VDD ));
-   cap100nf c100n_6 (.p0( VSS ), .p1( VDD ));  
+   cap100nf c100n_6 (.p0( VSS ), .p1( VDD ));
+   cap100nf_smd c100n_10 (.p0( VSS ), .p1( VDD ));
+   cap100nf_smd c100n_11 (.p0( VSS ), .p1( VDD ));
 
    // WDC 65816 CPU
    wdc65816 CPU (
@@ -80,7 +82,7 @@ module l1b_mk1();
             .rdnw(cpu_rnw),
             .e(cpu_e),
             .be(VDD),
-            .phi2in(cpu_ck_phi2),
+            .phi2in(cpu_phi2),
             .mx(),
             .vda(cpu_vda),
             .rstb(resetb)
@@ -91,19 +93,19 @@ module l1b_mk1();
                     .a18(ram_a18),  .vcc(VDD),
                     .a16(ram_a16),  .a15(cpu_a15),
                     .a14(cpu_a14),  .a17(ram_a17),
-                    .a12(cpu_a12),  .web(ram_web),
-                    .a7(cpu_a11),   .a13(cpu_a13),
-                    .a6(cpu_a10),   .a8(cpu_a8),
-                    .a5(cpu_a6),    .a9(cpu_a9),
-                    .a4(cpu_a4),    .a11(cpu_a0),
-                    .a3(cpu_a2),    .oeb(ram_ceb),
-                    .a2(cpu_a3),    .a10(cpu_a1),
-                    .a1(cpu_a4),    .csb(ram_ceb),
-                    .a0(cpu_a5 ),   .d7(cpu_d0),
-                    .d0(cpu_d7),    .d6(cpu_d1),
-                    .d1(cpu_d6),    .d5(cpu_d2),
-                    .d2(cpu_d5),    .d4(cpu_d3),
-                    .vss(VSS),      .d3(cpu_d4)
+                    .a12(cpu_a13),  .web(ram_web),
+                    .a7(cpu_a12),   .a13(cpu_a0),
+                    .a6(cpu_a11),   .a8(cpu_a1),
+                    .a5(cpu_a10),   .a9(cpu_a2),
+                    .a4(cpu_a9),    .a11(cpu_a3),
+                    .a3(cpu_a4),    .oeb(ram_ceb),
+                    .a2(cpu_a8),    .a10(cpu_a5),
+                    .a1(cpu_a7),    .csb(ram_ceb),
+                    .a0(cpu_a6 ),   .d7(cpu_d0),
+                    .d0(cpu_d1),    .d6(cpu_d2),
+                    .d1(cpu_d3),    .d5(cpu_d4),
+                    .d2(cpu_d5),    .d4(cpu_d6),
+                    .vss(VSS),      .d3(cpu_d7)
                     );
 
    // L1B CPLD in PLCC84 pin socket (can be 9572 or 95108)
@@ -148,11 +150,11 @@ module l1b_mk1();
                       // LHS
 		      .p33(cpu_vda),
 		      .p34(cpu_vpb),
-		      .p35(cpu_ck_phi2),
+		      .p35(cpu_phi2),
 		      .p36(cpu_vpa),
-		      .p37(cpu_rnw),
+		      .p37(cpu_e),
 		      .vccint1(VDD),
-		      .p39(cpu_e),
+		      .p39(cpu_rnw),
 		      .p40(cpu_d0),
 		      .p41(cpu_d1),
 		      .gnd4(VSS),
@@ -185,16 +187,16 @@ module l1b_mk1();
 		      .p67(cpu_a2),
 		      .p68(cpu_a1),
 		      .p69(cpu_a0),
-		      .p70(lat_en),
-		      .p71(bbc_a8),
+		      .p70(bbc_a8),
+		      .p71(lat_en),
 		      .p72(bbc_a9),
 		      .vccint2(VDD),
 		      .gsr(resetb),
 
                       // TOP
-		      .p75(bbc_a10),
+		      .p75(bbc_a12),
 		      .gts1(bbc_a11),
-		      .gts2(bbc_a12),
+		      .gts2(bbc_a10),
 		      .vccint3(VDD),
 		      .p79(bbc_a13),
 		      .p80(bbc_a14),
@@ -277,7 +279,7 @@ module l1b_mk1();
                       .p3(gpio0), .p4(gpio1),
                       .p5(gpio2), .p6(gpio3),
                       .p7(gpio4), .p8(gpio5),
-                      .p9(VSS),   .p10(VSS),
+                      .p9(VDD),   .p10(VDD),
                       );
 
 
