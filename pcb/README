@@ -23,3 +23,17 @@ jython ${NLIST_PATH}/src/netlister.py -i l1b_mk2.v \
     -f scr \
     -o l1b_mk2.scr \
     -t l1b_mk2_footer.scr
+
+jython ${NLIST_PATH}/src/netlister.py -i l1b_mk2.v \
+    -l "${NLIST_PATH}/lib/l1b-custom.lib" \
+    -l "${NLIST_PATH}/lib/l1a-custom.lib" \
+    -l "${NLIST_PATH}/lib/xilinx.lib" \
+    -l "${NLIST_PATH}/lib/cpu.lib" \
+    -l "${NLIST_PATH}/lib/rcl.lib" \
+    -l "${NLIST_PATH}/lib/i2c.lib" \
+    -l "${NLIST_PATH}/lib/memory.lib" \
+    -l "${NLIST_PATH}/lib/74series.lib" \
+    -l "${NLIST_PATH}/lib/switches.lib" \
+    -l "${NLIST_PATH}/lib/idc_connectors.lib" \
+    -o l1b_mk2.net \
+    -f net

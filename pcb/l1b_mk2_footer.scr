@@ -5,7 +5,7 @@ DRC load /tmp/design_rules;
 Grid default;
 Set Wire_Bend 0;
 Layer Dimension;
-Wire 0  (0 0) (4.0 3.2) (0 0);
+Wire 0  (0 0) (3.92 3.2) (0 0);
 Layer Top;
 
 # PCB-Pool/PCB-Train design rule is actually 0.006/0.006 for wires
@@ -33,22 +33,22 @@ ROTATE =R270 SRAM ;
 
 MOVE C100N_1     ( 2.85  2.35 ) ;
 MOVE C100N_2     ( 2.50  0.75 ) ;
-MOVE C100N_3     ( 1.30 2.60 ) ;
-MOVE C100N_4     ( 0.65 2.25 ) ;
+MOVE C100N_3     ( 1.30 2.50 ) ;
+MOVE C100N_4     ( 0.65 2.15 ) ;
 MOVE C100N_5     ( 2.0  0.35) ;
 MOVE C100N_6     ( 3.35 1.55) ;
 MOVE C100N_10    ( 2.55 1.85) ;
 MOVE C100N_11    ( 2.80 1.35) ;
 
 MOVE C22U_0      ( 0.2  2.50) ;
-MOVE CON         ( 3.75 1.55) ;
+MOVE CON         ( 3.65 1.50) ;
 MOVE CPLD        ( 2.55 1.55) ;
-MOVE CPU         ( 1.25 1.50) ;
+MOVE CPU         ( 1.25 1.40) ;
 MOVE GPIO        ( 2.95 2.95) ;
 MOVE JTAG        ( 2.0 3.00) ;
 MOVE OSC         ( 1.1 2.90) ;
 MOVE PWR         ( 0.20 2.95) ;
-MOVE SRAM        ( 0.45 1.30) ;
+MOVE SRAM        ( 0.45 1.20) ;
 MOVE IC2         ( 2.6  0.35) ;
 
 # SMD Caps on the back of the board
@@ -64,32 +64,31 @@ TEXT '(C) 2009, 2020 Revaldinho, BigEd'  R0 (0.1 0.16) ;
 TEXT 'http://github.com/BigEd/beeb816'  R0 (0.1 0.08) ;
 
 Window Fit;
-
 layer top;
 wire  0.015;
-#wire  'hsclk' (1.4 3.05) (1.55 3.05) (1.55 2.75 ) ( 3.40 2.75) (3.40 1.95) (3.15 1.95);
-wire  'hsclk' (3.40 2.75) (3.40 1.95) (3.15 1.95);
+wire  'hsclk' (3.30 2.75) (3.30 1.95) (3.15 1.95);
+
 # Preroute VDD and VSS rings
 layer top;
 wire  0.030;
-wire  'VDD' (0.03 0.03) ( 3.97 0.03) (3.97 3.17) (0.03 3.17) (0.03 0.03);
+wire  'VDD' (0.03 0.03) ( 3.88 0.03) (3.88 3.17) (0.03 3.17) (0.03 0.03);
 wire  0.025;
-wire  'VDD' (1.20 2.60) (1.20 1.75);
+wire  'VDD' (1.20 2.50) (1.20 1.65);
 layer bottom;
 wire  0.030;
-wire  'VSS' (0.03 0.03) ( 3.97 0.03) (3.97 3.17) (0.03 3.17) (0.03 0.03);
+wire  'VSS' (0.03 0.03) ( 3.88 0.03) (3.88 3.17) (0.03 3.17) (0.03 0.03);
 wire  0.015;
-wire  'hsclk' (1.4 3.05) (1.55 2.90) (1.55 2.75 ) (3.40 2.75) ;
+wire  'hsclk' (1.4 3.05) (1.55 3.05) (1.55 2.75 ) ( 3.30 2.75);
+
 
 # load autorouter params to get finer routing grid
 Auto load /tmp/auto-params-l1b.ctl;
 AUTO
 ## Define power fills top and bottom over whole board area
 layer Top ;
-polygon VDD 0.08 (0 0) (0 3.2) (4.0 3.2) (4.0 0) (0 0) ;
-
+polygon VDD 0.08 (0 0) (0 3.2) (3.92 3.2) (3.92 0) (0 0) ;
 layer Bottom ;
-polygon VSS 0.08 (0 0) (0 3.2) (4.0 3.2) (4.0 0) (0 0) ;
+polygon VSS 0.08 (0 0) (0 3.2) (3.92 3.2) (3.92 0) (0 0) ;
 
 RatsNest;   # to show incomplete wires and polygons
 Drc;

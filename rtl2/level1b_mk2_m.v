@@ -26,7 +26,7 @@
 `define CLK_CPUCLK_DIV_IDX_HI  1
 `define CLK_CPUCLK_DIV_IDX_LO  0
 `define BBC_PAGEREG_SZ         4    // only the bottom four ROM selection bits
-`define GPIO_SZ                4
+`define GPIO_SZ                2
 
 `ifdef ENABLE_GPIO_REG
  `define CPLD_REG_SEL_SZ        4

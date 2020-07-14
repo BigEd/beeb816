@@ -34,15 +34,15 @@ module l1b_mk2();
 
    // decoupling caps
    // Radial electolytic, one per board
-   cap22uf  c22u_0(.minus(VSS),.plus(VDD));
-   cap100nf c100n_1 (.p0( VSS ), .p1( VDD ));
-   cap100nf c100n_2 (.p0( VSS ), .p1( VDD ));
-   cap100nf c100n_3 (.p0( VDD ), .p1( VSS ));
-   cap100nf c100n_4 (.p0( VSS ), .p1( VDD ));
-   cap100nf c100n_5 (.p0( VSS ), .p1( VDD ));
-   cap100nf c100n_6 (.p0( VSS ), .p1( VDD ));
-   cap100nf_smd c100n_10 (.p0( VSS ), .p1( VDD ));
-   cap100nf_smd c100n_11 (.p0( VSS ), .p1( VDD ));
+   cap22uf  c22u_0 (.minus(VSS),.plus(VDD));
+   cap100nf c100n_1 (.p0(VSS), .p1(VDD));
+   cap100nf c100n_2 (.p0(VSS), .p1(VDD));
+   cap100nf c100n_3 (.p0(VDD), .p1(VSS));
+   cap100nf c100n_4 (.p0(VSS), .p1(VDD));
+   cap100nf c100n_5 (.p0(VSS), .p1(VDD));
+   cap100nf c100n_6 (.p0(VSS), .p1(VDD));
+   cap100nf_smd c100n_10 (.p0(VSS), .p1(VDD));
+   cap100nf_smd c100n_11 (.p0(VSS), .p1(VDD));
 
    // WDC 65816 CPU
    wdc65816 CPU (
@@ -86,7 +86,7 @@ module l1b_mk2();
             .mx(),
             .vda(cpu_vda),
             .rstb(resetb)
-            );
+           );
 
   // Alliance 512K x 8 SRAM - address pins wired to suit layout
   bs62lv4006  SRAM (
@@ -100,25 +100,25 @@ module l1b_mk2();
                     .a4(cpu_a4),    .a11(cpu_a3),
                     .a3(cpu_a9),    .oeb(ram_ceb),
                     .a2(cpu_a6),    .a10(cpu_a5),
-                    .a1(cpu_a6),    .csb(ram_ceb),
-                    .a0(cpu_a7 ),   .d7(cpu_d7),
+                    .a1(cpu_a8),    .csb(ram_ceb),
+                    .a0(cpu_a7),   .d7(cpu_d7),
                     .d0(cpu_d6),    .d6(cpu_d5),
                     .d1(cpu_d4),    .d5(cpu_d3),
                     .d2(cpu_d2),    .d4(cpu_d1),
                     .vss(VSS),      .d3(cpu_d0)
-                    );
+                   );
 
    // L1B CPLD in PLCC84 pin socket (can be 9572 or 95108)
   xc95108_pc84  CPLD (
 
-                      // RHS
-		      .p1(bbc_d4),
+                      // RHS (upper)
+		      .p1(bbc_a15),
 		      .p2(bbc_d3),
 		      .p3(bbc_d2),
 		      .p4(bbc_d1),
 		      .p5(bbc_d0),
-		      .p6(bbc_rnw),
-		      .p7(bbc_sync),
+		      .p6(bbc_sync),
+		      .p7(bbc_rnw),
 		      .gnd1(VSS),
 		      .gck1(hsclk),
 		      .gck2(bbc_phi0),
@@ -155,17 +155,17 @@ module l1b_mk2();
 		      .p37(cpu_e),
 		      .vccint1(VDD),
 		      .p39(cpu_rnw),
-		      .p40(cpu_d0),
-		      .p41(cpu_d1),
+		      .p40(cpu_d7),
+		      .p41(cpu_d0),
 		      .gnd4(VSS),
-		      .p43(cpu_d2),
-		      .p44(cpu_d3),
-		      .p45(cpu_d4),
-		      .p46(cpu_d5),
-		      .p47(cpu_d6),
-		      .p48(cpu_d7),
+		      .p43(cpu_d1),
+		      .p44(cpu_d6),
+		      .p45(cpu_d2),
+		      .p46(ram_ceb),
+		      .p47(cpu_d3),
+		      .p48(cpu_d4),
 		      .gnd5(VSS),
-		      .p50(ram_ceb),
+		      .p50(cpu_d5),
 		      .p51(cpu_a15),
 		      .p52(cpu_a14),
 		      .p53(cpu_a13),
@@ -193,18 +193,18 @@ module l1b_mk2();
 		      .vccint2(VDD),
 		      .gsr(resetb),
 
-                      // TOP
-		      .p75(bbc_a12),
+                      // RHS (lower)
+		      .p75(bbc_d7),
 		      .gts1(bbc_a11),
-		      .gts2(bbc_a10),
+		      .gts2(bbc_d6),
 		      .vccint3(VDD),
-		      .p79(bbc_a13),
+		      .p79(bbc_d5),
 		      .p80(bbc_a14),
-		      .p81(bbc_a15),
-		      .p82(bbc_d7),
-		      .p83(bbc_d6),
-		      .p84(bbc_d5)
-                      );
+		      .p81(bbc_d4),
+		      .p82(bbc_a12),
+		      .p83(bbc_a10),
+		      .p84(bbc_a13)
+                     );
 
   SN74373 IC2  (
                 .oeb(VSS),        .vdd(VDD),
@@ -217,7 +217,7 @@ module l1b_mk2();
                 .d3(cpu_a0),     .d4(cpu_a1),
                 .q3(bbc_a0),     .q4(bbc_a1),
                 .vss(VSS),       .le(lat_en)
-                );
+               );
 
 
 
@@ -227,7 +227,7 @@ module l1b_mk2();
                     .vdd(VDD),
                     .en(VDD),
                     .clk(hsclk)
-                    );
+                   );
 
    // 40W Plug which connects via IDC cable and header into the
    // host computer's 6502 CPU socket
@@ -272,7 +272,7 @@ module l1b_mk2();
                     .so(),
                     .phi2out(bbc_phi2),
                     .rstb(resetb)
-                    );
+                   );
 
   idc_hdr_10w    gpio(
                       .p1(VSS),   .p2(VSS),
@@ -280,7 +280,7 @@ module l1b_mk2();
                       .p5(gpio2), .p6(gpio3),
                       .p7(gpio4), .p8(gpio5),
                       .p9(VDD),   .p10(VDD),
-                      );
+                     );
 
 
    // jtag header for in system programming (same pinout as MacMall Breakout board
@@ -290,7 +290,7 @@ module l1b_mk2();
                 .p3(tms),  .p4(tdi),
                 .p5(tdo),  .p6(tck),
                 .p7(VDD),  .p8(),
-                );
+               );
 
    // Power header is convenient if we allow in system programming and pin out
    // compatible with MacMall connector.
@@ -298,5 +298,5 @@ module l1b_mk2();
                     .vdd1(VDD),
                     .vdd2(VDD),
                     .gnd(VSS)
-                    );
+                   );
 endmodule
