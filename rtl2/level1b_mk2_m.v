@@ -94,9 +94,11 @@ module level1b_mk2_m (
   reg                                  himem_vram_wr_lat_q;
   reg                                  remapped_rom_access_r ;
   reg                                  remapped_ram_access_r ;
+`ifdef STOP_ON_PHI1  
   reg                                  dummy_access_lat_q;
+`endif
+  
   reg                                  hisync_q;
-
   wire [ `CPLD_REG_SEL_SZ-1:0]         cpld_reg_sel_d;
   wire [7:0]                           cpu_hiaddr_lat_d;
   wire                                 rdy_w;
@@ -166,9 +168,14 @@ module level1b_mk2_m (
   assign ram_adr17 = cpu_hiaddr_lat_q[1] ;
   assign ram_adr18 = cpu_hiaddr_lat_q[2] ;
   assign ram_web = cpu_rnw;
+
+`ifdef STOP_ON_PHI1
   // lock low adr bits when running at high speed
   assign lat_en = !dummy_access_lat_q;
-
+`else
+  assign lat_en = !dummy_access_w;
+`endif  
+  
   // All addresses starting 0b11 go to the on-board RAM
   assign ram_ceb = !( cpu_phi2_w && (cpu_vda | cpu_vpa ) && (cpu_hiaddr_lat_q[7:6] == 2'b11) );
 
@@ -189,8 +196,14 @@ module level1b_mk2_m (
    assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = cpu_vda && (cpu_data[7]== 1'b0) && ( cpu_adr == `BBC_PAGED_ROM_SEL );
   
   // Force dummy read access when accessing himem explicitly but not for remapped RAM accesses which can still complete
+`ifdef STOP_ON_PHI1  
   assign bbc_adr = ( dummy_access_lat_q ) ? {8'h80} : cpu_adr[15:8] ;
   assign bbc_rnw = cpu_rnw | dummy_access_lat_q ;
+`else
+  assign bbc_adr = ( dummy_access_w ) ? {8'h80} : cpu_adr[15:8] ;
+  assign bbc_rnw = cpu_rnw | dummy_access_w ;
+`endif
+  
 `ifdef USE_DATA_LATCHES_CPU2BBC
   assign bbc_data = ( !bbc_rnw & bbc_phi0 & !hs_selected_w) ? cpu_data_lat_q : { 8{1'bz}};
 `else
@@ -313,17 +326,23 @@ module level1b_mk2_m (
   // Flop all the internal register sel bits on falling edge of phi1
   always @ ( posedge cpu_phi2_w or negedge resetb )
     if ( !resetb )
-      begin
         cpld_reg_sel_q <= {`CPLD_REG_SEL_SZ{1'b0}};
-        hisync_q <= 1'b0;
-      end
     else
-      begin
         cpld_reg_sel_q <= cpld_reg_sel_d ;
-        // Zero hisync_q on any non-hs cycle, and set it only after a successful hisync
-        hisync_q <= (!sel_hs_w) ? 1'b0 : (cpu_vda & cpu_vpa ) ? hisync_w : hisync_q;
-      end
 
+
+`ifdef STOP_ON_PHI1
+  always @ ( posedge cpu_phi2_w or negedge resetb )
+`else    
+  always @ ( negedge cpu_phi2_w or negedge resetb )
+`endif    
+    if ( !resetb ) 
+      hisync_q <= 1'b0;
+    else  
+      // Zero hisync_q on any non-hs cycle, and set it only after a successful hisync
+      hisync_q <= (cpu_vda & !himem_w) ? 1'b0 : (cpu_vda & cpu_vpa ) ? hisync_w : hisync_q;
+
+  
   // Latches for the high address bits open during PHI1
   always @ ( * )
     if ( !cpu_phi2_w )
@@ -332,10 +351,12 @@ module level1b_mk2_m (
         himem_vram_wr_lat_q <= himem_vram_wr_d;
       end
 
+`ifdef STOP_ON_PHI1    
   always @ ( * )
     if ( cpu_phi1_w )
       dummy_access_lat_q <= dummy_access_w;
-
+`endif
+    
 `ifdef USE_DATA_LATCHES_BBC2CPU
   // Latches for the BBC data open during PHI2 to be stable beyond cycle end
   always @ ( * )

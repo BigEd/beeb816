@@ -10,7 +10,7 @@ Layer Top;
 
 # PCB-Pool/PCB-Train design rule is actually 0.006/0.006 for wires
 CLASS 0 signal 0.010 0.010 ;
-CLASS 1 supply 0.024 0.012 ;
+CLASS 1 supply 0.020 0.012 ;
 
 ROTATE =R180  C100N_1 ;
 ROTATE =R0    C100N_2 ;
@@ -19,49 +19,42 @@ ROTATE =R0    C100N_4 ;
 ROTATE =R90   C100N_5 ;
 ROTATE =R270  C100N_6 ;
 ROTATE =R0    C100N_10;
-ROTATE =R180  C100N_11;
+ROTATE =R0  C100N_11;
+
 ROTATE =R270   C22U_0 ;
 ROTATE =R270 CON  ;
 ROTATE =R270 CPLD ;
 ROTATE =R270 CPU  ;
 ROTATE =R0   IC2  ;
-ROTATE =R180 JTAG ;
+ROTATE =R0   JTAG ;
 ROTATE =R0   GPIO ;
 ROTATE =R0   OSC  ;
 ROTATE =R90  PWR  ;
 ROTATE =R270 SRAM ;
 
-MOVE C100N_1     ( 2.85  2.35 ) ;
+MOVE C100N_1     ( 2.75  2.35 ) ;
 MOVE C100N_2     ( 2.50  0.75 ) ;
-MOVE C100N_3     ( 1.30 2.50 ) ;
+MOVE C100N_3     ( 1.30 2.55 ) ;
 MOVE C100N_4     ( 0.65 2.15 ) ;
-MOVE C100N_5     ( 2.0  0.35) ;
+MOVE C100N_5     ( 2.2  0.35) ;
 MOVE C100N_6     ( 3.35 1.55) ;
-MOVE C100N_10    ( 2.55 1.85) ;
-MOVE C100N_11    ( 2.80 1.35) ;
+MOVE C100N_10    ( 2.65 1.75) ;
+MOVE C100N_11    ( 2.75 1.25) ;
 
 MOVE C22U_0      ( 0.2  2.50) ;
 MOVE CON         ( 3.65 1.50) ;
 MOVE CPLD        ( 2.55 1.55) ;
 MOVE CPU         ( 1.25 1.40) ;
-MOVE GPIO        ( 2.95 2.95) ;
-MOVE JTAG        ( 2.0 3.00) ;
+MOVE GPIO        ( 3.05 2.95) ;
+MOVE JTAG        ( 2.1 3.00) ;
 MOVE OSC         ( 1.1 2.90) ;
 MOVE PWR         ( 0.20 2.95) ;
 MOVE SRAM        ( 0.45 1.20) ;
-MOVE IC2         ( 2.6  0.35) ;
+MOVE IC2         ( 2.8  0.35) ;
 
 # SMD Caps on the back of the board
 MIRROR C100N_10;
 MIRROR C100N_11;
-
-Layer tPlace ;
-CHANGE FONT PROPORTIONAL ;
-CHANGE SIZE 0.06 ;
-TEXT 'Beeb816 Revival! L1B Mk2' R0 (0.1 0.25) ;
-CHANGE SIZE 0.04 ;
-TEXT '(C) 2009, 2020 Revaldinho, BigEd'  R0 (0.1 0.16) ;
-TEXT 'http://github.com/BigEd/beeb816'  R0 (0.1 0.08) ;
 
 Window Fit;
 layer top;
@@ -72,14 +65,21 @@ wire  'hsclk' (3.30 2.75) (3.30 1.95) (3.15 1.95);
 layer top;
 wire  0.030;
 wire  'VDD' (0.03 0.03) ( 3.88 0.03) (3.88 3.17) (0.03 3.17) (0.03 0.03);
-wire  0.025;
-wire  'VDD' (1.20 2.50) (1.20 1.65);
+wire  0.020;
+wire  'VDD' (1.20 2.55) (1.20 1.65);
+wire  'VDD' (2.60 0.03) (2.60 0.75) (2.6 1.10);
+wire  'VDD' (2.55 2.15) (2.55 3.17);
+wire  'VDD' (2.55 2.35) (2.65 2.35);
+
+wire  'VSS' (1.55 0.45) (1.55 0.2);
+
 layer bottom;
 wire  0.030;
 wire  'VSS' (0.03 0.03) ( 3.88 0.03) (3.88 3.17) (0.03 3.17) (0.03 0.03);
 wire  0.015;
 wire  'hsclk' (1.4 3.05) (1.55 3.05) (1.55 2.75 ) ( 3.30 2.75);
-
+wire  0.020;
+wire  'VSS' (1.55 0.2) (1.55 0.03);
 
 # load autorouter params to get finer routing grid
 Auto load /tmp/auto-params-l1b.ctl;
@@ -91,4 +91,30 @@ layer Bottom ;
 polygon VSS 0.08 (0 0) (0 3.2) (3.92 3.2) (3.92 0) (0 0) ;
 
 RatsNest;   # to show incomplete wires and polygons
+
+
+Layer tPlace ;
+CHANGE FONT PROPORTIONAL ;
+CHANGE SIZE 0.06 ;
+TEXT 'Beeb816 Revival! L1B Mk2' R0 (0.1 0.25) ;
+CHANGE SIZE 0.04 ;
+TEXT '(C) 2009, 2020 Revaldinho, BigEd'  R0 (0.1 0.16) ;
+TEXT 'http://github.com/BigEd/beeb816'  R0 (0.1 0.08) ;
+
+CHANGE FONT FIXED ;
+CHANGE SIZE 0.03 ;
+CHANGE WIDTH 0.01 ;
+WIRE  (1.9 2.61) (1.9 2.75 ) (2.35 2.75 ) (2.35 2.61) (1.9 2.61 ) ;
+TEXT 'GND TDI TCK NC' R0 (1.93 2.70) ;
+TEXT 'GND TMS TDO 5V' R0 (1.93 2.65) ;
+
+WIRE  (2.7 2.61) (2.7 2.75 ) (3.38 2.75 ) (3.38 2.61) (2.7 2.61 ) ;
+TEXT 'GND PIO1 PIO3 PIO5 VDD' R0 (2.73 2.70) ;
+TEXT 'GND PIO0 PIO2 PIO4 VDD' R0 (2.73 2.65) ;
+
+
+
+
+
 Drc;
+
