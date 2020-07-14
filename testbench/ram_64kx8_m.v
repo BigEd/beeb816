@@ -9,13 +9,14 @@ module ram_64kx8_m (
 
 reg [7:0] mem [ 64 * 1024:0 ];
 integer idx;
-
+wire [7:0] hold_data;
+  
 
 // read operations are combinatorial
 assign data = ( !ceb & rnw & !oeb ) ? mem[ addr ] : 8'bz ;
-
-// write operations happen on posedge of ceb or rnw (whichever occurs first)
-always @ ( posedge ceb or posedge rnw )  
-       if ( ceb == 0 || rnw == 0)
-          mem[ addr ] = data;       
+assign #10 hold_data = data;
+  
+always @ ( * )  
+       if ( ceb == 0 && rnw == 0)
+          mem[ addr ] = hold_data;       
 endmodule

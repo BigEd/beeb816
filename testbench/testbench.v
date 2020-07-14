@@ -13,6 +13,22 @@ primitive INV (O, I);
   endtable
 endprimitive
 
+module adrlat(
+              input [7:0] i,
+              inout [7:0] o,
+              input oeb,
+              input lat_en
+              );
+  reg [7:0]         lat_q;
+
+  assign o = (oeb) ? 8'bz : lat_q;
+  always @ ( *  )
+    if (lat_en)
+      lat_q <= i;
+  
+endmodule // adrlat
+
+
 module testbench();
   
 
@@ -62,7 +78,7 @@ module testbench();
 	 dataread( `ADDR_DATA,  24'h00400B , 8'h0C);
 	 // back to HS mem then lowmem
 	 dataread( `ADDR_IFETCH,  24'hFF0000 , 8'hC0);
-	dataread( `ADDR_DATA,  24'h00000A , 8'hCA); // Via remapped RAM
+  	 dataread( `ADDR_DATA,  24'h00000A , 8'hCA); // Via remapped RAM
          dataread( `ADDR_IFETCH,  24'hFF0000 , 8'hC0);
 	 dataread( `ADDR_DATA,  24'h00000A , 8'hCA);    // Via remapped RAM
          dataread( `ADDR_IFETCH,  24'hFF0000 , 8'hC0);
@@ -238,6 +254,9 @@ module testbench();
    wire [15:0] bbc_addr_w;
    wire        bbc_rnw_w;      
    wire        bbc_ceb_w;
+   wire        ram_web_w;
+   wire        ram_ceb_w;
+   wire        lat_en_w;  
    wire        bbc_ck2_phi1_w;
    wire        bbc_ck2_phi2_w;   
    wire        tb_cpu_ck_phi2_w;
@@ -246,7 +265,7 @@ module testbench();
    wire        rdy_w;
    wire        scl_w;
    wire        sda_w;
-   wire [6:0]  gpio_w;
+   wire [1:0]  gpio_w;
    reg         scl_r;
    
 
@@ -259,12 +278,11 @@ module testbench();
    assign (weak1,strong0) scl_w = scl_r;   
    
    assign ram_addr_w[15:0] = cpu_addr_w[15:0];
-   assign bbc_addr_w[13:0] = cpu_addr_w[13:0];   
 
    // CPU (testbench) drives bus in PHI1 and when writing
    assign cpu_data_w = (cpu_ck_phi1_w & rdy_w) ? cpu_addr_r[23:16] : ((!rnw_w ) ? cpu_data_r : 8'bz);
    
-   
+
 
 // Host is represented by a 64K RAM which is always enabled and can
 // drive the data bus during BBC phi2 only. Dummy accesses will be
@@ -282,46 +300,51 @@ ram_512kx8_m card_ram0_u  (
   .addr( ram_addr_w),
   .data( cpu_data_w),
   .ceb ( ram_ceb_w ),
-  .rnw ( rnw_w),
+  .rnw ( ram_web_w),
   .oeb ( ram_ceb_w)
   );
    
   
-level1b_m dut0_u (
-  .addr(cpu_addr_w[15:0]),
+level1b_mk2_m dut0_u (
+  .cpu_adr(cpu_addr_w[15:0]),
   .resetb(resetb_w),
   .gpio(gpio_w),
-  .vda(vda_w),
-  .vpa(vpa_w),
-  .bbc_ck2_phi0(bbc_ck2_phi0_w),
+  .cpu_vda(vda_w),
+  .cpu_vpa(vpa_w),
+  .bbc_phi0(bbc_ck2_phi0_w),
   .hsclk(hsclk_w),
-  .rnw(rnw_w),
+  .cpu_rnw(rnw_w),
   .cpu_data(cpu_data_w),
   .bbc_data(bbc_data_w),
 `ifndef GATESIM_D                  
-  .vpb(vpb_w),
+  .cpu_vpb(vpb_w),
   .cpu_e(e_w),
   .rdy(rdy_w),
   .nmib(nmib_w),
-  .scl(scl_w),
-  .sda(sda_w),
   .irqb(irqb_w),
 `endif                  
   .ram_ceb(ram_ceb_w),
-  .ram_addr18(ram_addr_w[18]),		  
-  .ram_addr17(ram_addr_w[17]),
-  .ram_addr16(ram_addr_w[16]), 	 
+  .ram_web(ram_web_w),                      
+  .ram_adr18(ram_addr_w[18]),		  
+  .ram_adr17(ram_addr_w[17]),
+  .ram_adr16(ram_addr_w[16]), 	 
   .bbc_sync(sync_w),
-  .bbc_addr15(bbc_addr_w[15]),
-  .bbc_addr14(bbc_addr_w[14]),
+  .bbc_adr(bbc_addr_w[15:8]),
   .bbc_rnw(bbc_rnw_w),
-  .bbc_ck2_phi1(bbc_ck2_phi1_w),
-  .bbc_ck2_phi2(bbc_ck2_phi2_w),		  
-  .cpu_ck_phi2(tb_cpu_ck_phi2_w)
+  .bbc_phi1(bbc_ck2_phi1_w),
+  .bbc_phi2(bbc_ck2_phi2_w),		  
+  .cpu_phi2(tb_cpu_ck_phi2_w),
+  .lat_en(lat_en_w)                                            
   );
 
 
-
+adrlat adrlat_u (
+                 .i(cpu_addr_w[7:0]),
+                 .o(bbc_addr_w[7:0]),
+                 .oeb(1'b0),
+                 .lat_en(lat_en_w)
+                 );
+  
    
    initial
      begin
@@ -405,7 +428,7 @@ level1b_m dut0_u (
 //        $display( "***********************************************");
        $display( " Enable High Speed clock (divide by 4)     ");
        datawrite( 24'h800003, 8'hB0 );
-       datawrite( 24'h800003, 8'hF0 );	       
+       datawrite( 24'h800003, 8'hF2 );	       
        $display( " Check operation of Clock Switch again         ");        
        fail_count = 0;           
        e_r = 0;
