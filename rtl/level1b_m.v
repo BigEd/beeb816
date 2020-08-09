@@ -16,7 +16,7 @@
 // fix Ed's flakey BBC.
 //`define RAM_MAPPED_ON_BOOT_D 1
 
-`define MAP_CC_DATA_SZ     7
+`define MAP_CC_DATA_SZ     8
 `define MAP_HSCLK_EN_IDX   6
 `define MAP_ROM_IDX        5
 `define MAP_RAM_IDX        4
@@ -196,6 +196,8 @@ module level1b_m (
 
   // Assume only lowest 8K of RAM is not used for video
   assign himem_vram_wr_d = !cpu_data[7] & !addr[15] & (addr[14]|addr[13]) & !rnw & vda ;
+  // Assume all of RAM except pages 0 and 1 are used for video
+  
   // Select the high speed clock only
   // * on valid instruction fetches from himem, or
   // * on valid imm/data fetches from himem _if_ hs clock is already selected, or
@@ -241,10 +243,11 @@ module level1b_m (
       begin
 	if (cpu_hiaddr_lat_q[7])
 	  if ( cpld_reg_select_q[`CPLD_REG_SEL_MAP_CC_IDX]  )
-            cpu_data_r = { {(8-`MAP_CC_DATA_SZ){1'b0}}, map_data_q};
+            cpu_data_r = { {(8-`MAP_CC_DATA_SZ){1'b0}}, map_data_q} ;
           else //must be RAM access
-            cpu_data_r = {8{1'bz}};
+            cpu_data_r = 8'bz;
         else
+
 `ifdef USE_DATA_LATCHES_BBC2CPU
           cpu_data_r = bbc_data_lat_q;
 `else
@@ -292,7 +295,7 @@ module level1b_m (
     else
       begin
         cpld_reg_select_q <= cpld_reg_select_d ;
-        hisync_q <= (vda & vpa ) ? hisync_w : hisync_q;
+        hisync_q <= (vda & !himem_w ) ? 1'b0 : (vda & vpa ) ? hisync_w : hisync_q;
       end // else: !if(cpld_reg_select_q[`CPLD_REG_SEL_BBC_PAGEREG_IDX] & !rnw )
 
   // Latches for the high address bits open during PHI1

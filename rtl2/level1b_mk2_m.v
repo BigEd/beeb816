@@ -224,7 +224,7 @@ module level1b_mk2_m (
                                                      (!cpu_vpa & !cpu_vda & hs_selected_w)
                                                      ) ;
 
-  assign dummy_access_w = himem_w | sel_hs_w | !ls_selected_w ;
+  assign dummy_access_w =  himem_w | sel_hs_w | !ls_selected_w ;
 
   // ROM remapping
   always @ ( * )
