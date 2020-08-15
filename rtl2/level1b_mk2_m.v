@@ -1,7 +1,4 @@
 `timescale 1ns / 1ns
-// Define this to determine stopping clock state with PHI2 high, default is PHI1 high
-// `define STOP_ON_PHI2 1
-
 // Interrupts are not handled in '816 mode so leave this undefined for now
 //`ifdef REMAP_NATIVE_INTERRUPTS_D
 
@@ -12,12 +9,21 @@
 // Enable internal GPIO register
 `define ENABLE_GPIO_REG  1
 
+// Define this to remap all of BBC RAM to high memory, and then reads from the video area will be at
+// full speed, but writes at normal speed. Commenting it out means that only the bottom 8K of RAM
+// is remapped to high memory and the remainder is access directly (and slowly) on the Beeb
+`define CACHE_VRAM_READS 1
+
 
 // RAM_MAPPED_ON_BOOT_D allows the CPLD to boot with the RAM mapping already
 // enabled. This won't work with systems like the Oric which have IO space
 // at the bottom of the address map, but is generally ok for the BBC and may
 // fix Ed's flakey BBC.
 //`define RAM_MAPPED_ON_BOOT_D 1
+
+// Depth of pipeline to delay switches to HS clock after an IO access. 3 is enough when the
+// HS clock is 16MHz
+`define IO_ACCESS_DELAY_SZ             3
 
 `define MAP_CC_DATA_SZ         7
 `define MAP_HSCLK_EN_IDX       6
@@ -83,7 +89,7 @@ module level1b_mk2_m (
 `endif
 `ifdef ENABLE_GPIO_REG
   reg [`GPIO_SZ-1:0]                   gpio_reg_data_q;
-  reg [`GPIO_SZ-1:0]                   gpio_reg_dir_q; 
+  reg [`GPIO_SZ-1:0]                   gpio_reg_dir_q;
 `endif
 
   // This is the internal register controlling which features like high speed clocks etc are enabled
@@ -94,11 +100,10 @@ module level1b_mk2_m (
   reg                                  himem_vram_wr_lat_q;
   reg                                  remapped_rom_access_r ;
   reg                                  remapped_ram_access_r ;
-`ifdef STOP_ON_PHI1  
-  reg                                  dummy_access_lat_q;
-`endif
-  
-  reg                                  hisync_q;
+
+  reg [ `IO_ACCESS_DELAY_SZ-1:0]       io_access_pipe_q;
+  wire                                 io_access_pipe_d;
+
   wire [ `CPLD_REG_SEL_SZ-1:0]         cpld_reg_sel_d;
   wire [7:0]                           cpu_hiaddr_lat_d;
   wire                                 rdy_w;
@@ -122,7 +127,6 @@ module level1b_mk2_m (
   INV    ckdel3   ( .I(ckdel_2),      .O(ckdel_3_b));
   INV    ckdel4   ( .I(ckdel_3_b),    .O(ckdel_4));
 
-`ifdef STOP_ON_PHI2
   clkctrl_phi2 U_0 (
                     .hsclk_in(hsclk),
                     .lsclk_in(ckdel_3_b),
@@ -135,20 +139,6 @@ module level1b_mk2_m (
                     );
   assign cpu_phi2_w = !cpu_phi1_w ;
   assign cpu_phi2 =  cpu_phi2_w ;
-`else
-  clkctrl_phi1 U_0 (
-                    .hsclk_in(hsclk),
-                    .lsclk_in(ckdel_4),
-                    .rst_b(resetb),
-                    .hsclk_sel(sel_hs_w),
-                    .cpuclk_div_sel(map_data_q[`CLK_CPUCLK_DIV_IDX_HI:`CLK_CPUCLK_DIV_IDX_LO]),
-                    .hsclk_selected(hs_selected_w),
-                    .lsclk_selected(ls_selected_w),
-                    .clkout(cpu_phi2_w)
-                    );
-  assign cpu_phi2 =  cpu_phi2_w ;
-  assign cpu_phi1_w = !cpu_phi2_w ;
-`endif
   assign bbc_phi1 = ckdel_3_b;
   assign bbc_phi2 = ckdel_4;
   assign bbc_sync = cpu_vpa & cpu_vda;
@@ -168,42 +158,31 @@ module level1b_mk2_m (
   assign ram_adr17 = cpu_hiaddr_lat_q[1] ;
   assign ram_adr18 = cpu_hiaddr_lat_q[2] ;
   assign ram_web = cpu_rnw;
-
-`ifdef STOP_ON_PHI1
-  // lock low adr bits when running at high speed
-  assign lat_en = !dummy_access_lat_q;
-`else
   assign lat_en = !dummy_access_w;
-`endif  
-  
+
   // All addresses starting 0b11 go to the on-board RAM
   assign ram_ceb = !( cpu_phi2_w && (cpu_vda | cpu_vpa ) && (cpu_hiaddr_lat_q[7:6] == 2'b11) );
 
   // All addresses starting with 0b10 go to internal IO registers which update on the
   // rising edge of cpu_phi1 - use the cpu_data bus directly for the high address
   // bits since it's stable by the end of phi1
-`ifdef ENABLE_GPIO_REG  
+`ifdef ENABLE_GPIO_REG
    assign cpld_reg_sel_d[`CPLD_REG_SEL_GPIO_DATA_IDX] = cpu_vda && ( cpu_data[7:6]== 2'b10) && ( cpu_adr[1:0] == 2'b01);
    assign cpld_reg_sel_d[`CPLD_REG_SEL_GPIO_DIR_IDX] = cpu_vda && ( cpu_data[7:6]== 2'b10) && ( cpu_adr[1:0] == 2'b00);
-   genvar                              i;   
-   generate 
+   genvar                              i;
+   generate
       for (i = 0; i < `GPIO_SZ; i = i + 1) begin : gpio_drv
-         assign gpio[i] = ( gpio_reg_dir_q[i]) ? gpio_reg_data_q[i] : 1'bz;    
+         assign gpio[i] = ( gpio_reg_dir_q[i]) ? gpio_reg_data_q[i] : 1'bz;
       end
-   endgenerate   
-`endif  
+   endgenerate
+`endif
    assign cpld_reg_sel_d[`CPLD_REG_SEL_MAP_CC_IDX] = cpu_vda && ( cpu_data[7:6]== 2'b10) && ( cpu_adr[1:0] == 2'b11);
    assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = cpu_vda && (cpu_data[7]== 1'b0) && ( cpu_adr == `BBC_PAGED_ROM_SEL );
-  
+
   // Force dummy read access when accessing himem explicitly but not for remapped RAM accesses which can still complete
-`ifdef STOP_ON_PHI1  
-  assign bbc_adr = ( dummy_access_lat_q ) ? {8'h80} : cpu_adr[15:8] ;
-  assign bbc_rnw = cpu_rnw | dummy_access_lat_q ;
-`else
   assign bbc_adr = ( dummy_access_w ) ? {8'h80} : cpu_adr[15:8] ;
   assign bbc_rnw = cpu_rnw | dummy_access_w ;
-`endif
-  
+
 `ifdef USE_DATA_LATCHES_CPU2BBC
   assign bbc_data = ( !bbc_rnw & bbc_phi0 & !hs_selected_w) ? cpu_data_lat_q : { 8{1'bz}};
 `else
@@ -212,19 +191,23 @@ module level1b_mk2_m (
   assign cpu_data = cpu_data_r;
 
   // NO need to check VPA here because writes will only be asserting VDA
-  assign himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & (cpu_adr[14]|cpu_adr[13]) & !cpu_rnw & cpu_vda ;  
+  assign himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & (cpu_adr[14]|cpu_adr[13]) & !cpu_rnw & cpu_vda ;
+  // Check for accesses to IO space in case we need to delay switching back to HS clock
+  assign io_access_pipe_d = !cpu_hiaddr_lat_q[7] & ( &(cpu_adr[15:10]) ) & cpu_vda;
+
   // Sel the high speed clock only
   // * on valid instruction fetches from himem, or
   // * on valid imm/data fetches from himem _if_ hs clock is already selected, or
   // * on invalid bus cycles if hs clock is already selected
   assign himem_w =  (cpu_hiaddr_lat_q[7] & !himem_vram_wr_lat_q);
-  assign hisync_w = cpu_vpa & cpu_vda & himem_w;
-  assign sel_hs_w = map_data_q[`MAP_HSCLK_EN_IDX] & (( hisync_w & hisync_q) |
+  assign hisync_w = cpu_vpa & cpu_vda & cpu_hiaddr_lat_q[7];
+  assign sel_hs_w = map_data_q[`MAP_HSCLK_EN_IDX] & (( hisync_w & !io_access_pipe_q[0] ) |
                                                      ((cpu_vpa | cpu_vda ) & himem_w & hs_selected_w) |
                                                      (!cpu_vpa & !cpu_vda & hs_selected_w)
                                                      ) ;
 
-  assign dummy_access_w =  himem_w | sel_hs_w | !ls_selected_w ;
+//  assign dummy_access_w =  himem_w | sel_hs_w | !ls_selected_w ;
+  assign dummy_access_w =  himem_w | !ls_selected_w ;
 
   // ROM remapping
   always @ ( * )
@@ -272,7 +255,7 @@ module level1b_mk2_m (
         // Read GPIO pin state directly
           else if (cpld_reg_sel_q[`CPLD_REG_SEL_GPIO_DATA_IDX] )
             cpu_data_r = { {(8-`GPIO_SZ){1'b0}}, gpio};
-`endif        
+`endif
           else //must be RAM access
             cpu_data_r = {8{1'bz}};
         else
@@ -305,8 +288,8 @@ module level1b_mk2_m (
         bbc_pagereg_q <= {`BBC_PAGEREG_SZ{1'b0}};
 `ifdef ENABLE_GPIO_REG
          gpio_reg_dir_q <= `GPIO_SZ'b0;
-         gpio_reg_data_q <= `GPIO_SZ'b0;         
-`endif         
+         gpio_reg_data_q <= `GPIO_SZ'b0;
+`endif
       end
     else
       begin
@@ -317,7 +300,7 @@ module level1b_mk2_m (
           gpio_reg_data_q <= cpu_data;
         else if (cpld_reg_sel_q[`CPLD_REG_SEL_GPIO_DIR_IDX] & !cpu_rnw )
           gpio_reg_dir_q <= cpu_data;
-`endif        
+`endif
         else if (cpld_reg_sel_q[`CPLD_REG_SEL_BBC_PAGEREG_IDX] & !cpu_rnw )
           bbc_pagereg_q <= cpu_data;
       end // else: !if( !resetb )
@@ -331,18 +314,15 @@ module level1b_mk2_m (
         cpld_reg_sel_q <= cpld_reg_sel_d ;
 
 
-`ifdef STOP_ON_PHI1
-  always @ ( posedge cpu_phi2_w or negedge resetb )
-`else    
-  always @ ( negedge cpu_phi2_w or negedge resetb )
-`endif    
-    if ( !resetb ) 
-      hisync_q <= 1'b0;
-    else  
-      // Zero hisync_q on any non-hs cycle, and set it only after a successful hisync
-      hisync_q <= (cpu_vda & !himem_w) ? 1'b0 : (cpu_vda & cpu_vpa ) ? hisync_w : hisync_q;
+  // Short pipeline to delay switching back to hs clock after an IO access to ensure any instruction
+  // timed delays are respected.
+  always @ ( negedge cpu_phi2_w or negedge resetb ) begin
+    if ( !resetb )
+      io_access_pipe_q <= `IO_ACCESS_DELAY_SZ'b0;
+    else
+      io_access_pipe_q <= ( io_access_pipe_q >> 1 )| {`IO_ACCESS_DELAY_SZ{ io_access_pipe_d }};
+  end
 
-  
   // Latches for the high address bits open during PHI1
   always @ ( * )
     if ( !cpu_phi2_w )
@@ -351,12 +331,6 @@ module level1b_mk2_m (
         himem_vram_wr_lat_q <= himem_vram_wr_d;
       end
 
-`ifdef STOP_ON_PHI1    
-  always @ ( * )
-    if ( cpu_phi1_w )
-      dummy_access_lat_q <= dummy_access_w;
-`endif
-    
 `ifdef USE_DATA_LATCHES_BBC2CPU
   // Latches for the BBC data open during PHI2 to be stable beyond cycle end
   always @ ( * )
