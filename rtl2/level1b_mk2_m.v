@@ -14,8 +14,8 @@
 // fix Ed's flakey BBC.
 //`define RAM_MAPPED_ON_BOOT_D 1
 
-// Depth of pipeline to delay switches to HS clock after an IO access. 3 is enough when the HS clock is 16MHz
-`define IO_ACCESS_DELAY_SZ             3
+// Depth of pipeline to delay switches to HS clock after an IO access.
+`define IO_ACCESS_DELAY_SZ             4
 
 `define MAP_CC_DATA_SZ         7
 `define MAP_HSCLK_EN_IDX       6
