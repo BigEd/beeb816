@@ -4,9 +4,8 @@
 // Switch stops the clock in the PHI2 state
 //
 
-
 `define PIPE_SZ 2
-`define LONG_PIPE_SZ 8
+`define LONG_PIPE_SZ 9
 
 module clkctrl_phi2(
                input       hsclk_in,
