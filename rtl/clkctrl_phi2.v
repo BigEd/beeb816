@@ -23,7 +23,7 @@ module clkctrl_phi2(
   reg                     cpuclk_r;
   reg                     hs_enable_q, ls_enable_q;
   reg                     selected_ls_q, selected_hs_q;
-  reg [`LONG_PIPE_SZ-1:0]      pipe_retime_ls_enable_q;
+  reg [`LONG_PIPE_SZ-1:0] pipe_retime_ls_enable_q;
   reg [`PIPE_SZ-1:0]      pipe_retime_hs_enable_q;
 
   wire                    retimed_ls_enable_w = pipe_retime_ls_enable_q[0];

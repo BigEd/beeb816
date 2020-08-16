@@ -4,16 +4,9 @@
 
 // Use data latches on CPU2BBC and/or BBC2CPU data transfers to improve hold times
 `define USE_DATA_LATCHES_BBC2CPU 1
-//`define USE_DATA_LATCHES_CPU2BBC 1
 
 // Enable internal GPIO register
 `define ENABLE_GPIO_REG  1
-
-// Define this to remap all of BBC RAM to high memory, and then reads from the video area will be at
-// full speed, but writes at normal speed. Commenting it out means that only the bottom 8K of RAM
-// is remapped to high memory and the remainder is access directly (and slowly) on the Beeb
-`define CACHE_VRAM_READS 1
-
 
 // RAM_MAPPED_ON_BOOT_D allows the CPLD to boot with the RAM mapping already
 // enabled. This won't work with systems like the Oric which have IO space
@@ -83,9 +76,6 @@ module level1b_mk2_m (
   reg [7:0]                            cpu_data_r;
 `ifdef USE_DATA_LATCHES_BBC2CPU
   reg [7:0]                            bbc_data_lat_q;
-`endif
-`ifdef USE_DATA_LATCHES_CPU2BBC
-  reg [7:0]                            cpu_data_lat_q;
 `endif
 `ifdef ENABLE_GPIO_REG
   reg [`GPIO_SZ-1:0]                   gpio_reg_data_q;
@@ -183,15 +173,12 @@ module level1b_mk2_m (
   assign bbc_adr = ( dummy_access_w ) ? {8'h80} : cpu_adr[15:8] ;
   assign bbc_rnw = cpu_rnw | dummy_access_w ;
 
-`ifdef USE_DATA_LATCHES_CPU2BBC
-  assign bbc_data = ( !bbc_rnw & bbc_phi0 & !hs_selected_w) ? cpu_data_lat_q : { 8{1'bz}};
-`else
   assign bbc_data = ( !bbc_rnw & bbc_phi0 & bbc_phi2 & !hs_selected_w) ? cpu_data : { 8{1'bz}};
-`endif
   assign cpu_data = cpu_data_r;
 
   // NO need to check VPA here because writes will only be asserting VDA
-  assign himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & (cpu_adr[14]|cpu_adr[13]) & !cpu_rnw & cpu_vda ;
+  assign himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & (cpu_adr[14]|cpu_adr[13]) & !cpu_rnw  ;
+
   // Check for accesses to IO space in case we need to delay switching back to HS clock
   assign io_access_pipe_d = !cpu_hiaddr_lat_q[7] & ( &(cpu_adr[15:10]) ) & cpu_vda;
 
@@ -199,10 +186,10 @@ module level1b_mk2_m (
   // * on valid instruction fetches from himem, or
   // * on valid imm/data fetches from himem _if_ hs clock is already selected, or
   // * on invalid bus cycles if hs clock is already selected
-  assign himem_w =  (cpu_hiaddr_lat_q[7] & !himem_vram_wr_lat_q);
-  assign hisync_w = cpu_vpa & cpu_vda & cpu_hiaddr_lat_q[7];
+  assign himem_w =  (cpu_vpa|cpu_vda) & (cpu_hiaddr_lat_q[7] & !himem_vram_wr_lat_q);
+  assign hisync_w = (cpu_vpa&cpu_vda) & cpu_hiaddr_lat_q[7];
   assign sel_hs_w = map_data_q[`MAP_HSCLK_EN_IDX] & (( hisync_w & !io_access_pipe_q[0] ) |
-                                                     ((cpu_vpa | cpu_vda ) & himem_w & hs_selected_w) |
+                                                     ( himem_w & hs_selected_w) |
                                                      (!cpu_vpa & !cpu_vda & hs_selected_w)
                                                      ) ;
 
@@ -222,7 +209,6 @@ module level1b_mk2_m (
     else
       remapped_rom_access_r = 0;
 
-`ifdef CACHE_VRAM_READS
   // RAM remapping - remap all of 32K RAM for reads and writes while CPU runs at BBC clock speed,
   // but HS clock switching will need to care for which RAM is being used for video when writing
   always @ ( * )
@@ -230,14 +216,6 @@ module level1b_mk2_m (
       remapped_ram_access_r = 1;
     else
       remapped_ram_access_r = 0;
-`else
-  // RAM remapping - remap only lowest 8K of RAM  for reads and writes while CPU runs at BBC clock speed,
-  always @ ( * )
-    if (!cpu_data[7] & map_data_q[`MAP_RAM_IDX] & !cpu_adr[15] & !cpu_adr[14] & !cpu_adr[13] & (cpu_vpa|cpu_vda))
-      remapped_ram_access_r = 1;
-    else
-      remapped_ram_access_r = 0;
-`endif // !`ifdef CACHE_VRAM_READS
 
   assign cpu_hiaddr_lat_d[7:1] = cpu_data[7:1] | { 7{remapped_ram_access_r | remapped_rom_access_r | native_mode_int_w} };
 
@@ -337,12 +315,5 @@ module level1b_mk2_m (
     if ( !bbc_phi1 )
       bbc_data_lat_q <= bbc_data;
 `endif
-
-`ifdef USE_DATA_LATCHES_CPU2BBC
-  always @ ( * )
-    if ( cpu_phi2_w )
-      cpu_data_lat_q <= cpu_data;
-`endif
-
 
 endmodule // level1b_m

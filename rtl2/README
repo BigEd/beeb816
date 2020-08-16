@@ -3,7 +3,7 @@
 design=level1b_mk2_m
 
 if [ $# -lt 1 ]; then
-    target=xc95108
+    target=xc95108-15-pc84
 else
     target=$1
 fi
@@ -22,7 +22,7 @@ ${BUILD_SCR}  \
     -a "xst: -define { $defines }"  \
     -m ${design} \
     -d build_${target}_p3_ff \
-    -f -t ${target}-15-pc84  \
+    -f -t ${target}  \
     -c ${design}.ucf -o speed 
 mv build_${target}_p3_ff/${design}.jed ./${design}_${defines}.jed
 
