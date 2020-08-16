@@ -6,18 +6,15 @@
 //`define USE_DATA_LATCHES_BBC2CPU 1
 
 // Enable internal GPIO register
-`define ENABLE_GPIO_REG  1
-
-
+//`define ENABLE_GPIO_REG  1
 
 // RAM_MAPPED_ON_BOOT_D allows the CPLD to boot with the RAM mapping already
 // enabled. This won't work with systems like the Oric which have IO space
 // at the bottom of the address map, but is generally ok for the BBC and may
 // fix Ed's flakey BBC.
-`define RAM_MAPPED_ON_BOOT_D 1
+//`define RAM_MAPPED_ON_BOOT_D 1
 
-// Depth of pipeline to delay switches to HS clock after an IO access. 3 is enough when the
-// HS clock is 16MHz
+// Depth of pipeline to delay switches to HS clock after an IO access. 3 is enough when the HS clock is 16MHz
 `define IO_ACCESS_DELAY_SZ             3
 
 `define MAP_CC_DATA_SZ         7
@@ -177,9 +174,7 @@ module level1b_mk2_m (
   assign bbc_data = ( !bbc_rnw & bbc_phi0 & bbc_phi2 & !hs_selected_w) ? cpu_data : { 8{1'bz}};
   assign cpu_data = cpu_data_r;
 
-  // NO need to check VPA here because writes will only be asserting VDA
   assign himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & (cpu_adr[14]|cpu_adr[13]) & !cpu_rnw  ;
-
   // Check for accesses to IO space in case we need to delay switching back to HS clock
   assign io_access_pipe_d = !cpu_hiaddr_lat_q[7] & ( &(cpu_adr[15:10]) ) & cpu_vda;
 
@@ -194,8 +189,6 @@ module level1b_mk2_m (
                                                      ( himem_w & hs_selected_w) |
                                                      (!cpu_vpa & !cpu_vda & hs_selected_w)
                                                      ) ;
-
-//  assign dummy_access_w =  himem_w | sel_hs_w | !ls_selected_w ;
   assign dummy_access_w =  himem_w | !ls_selected_w ;
 
   // ROM remapping
@@ -213,7 +206,7 @@ module level1b_mk2_m (
 
   // RAM remapping - remap all of 32K RAM for reads and writes while CPU runs at BBC clock speed,
   always @ ( * )
-    if (!cpu_data[7] & map_data_q[`MAP_RAM_IDX] & !cpu_adr[15] )    
+    if (!cpu_data[7] & map_data_q[`MAP_RAM_IDX] & !cpu_adr[15] )
       remapped_ram_access_r = 1;
     else
       remapped_ram_access_r = 0;

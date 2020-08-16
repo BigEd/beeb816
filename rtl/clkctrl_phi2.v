@@ -5,7 +5,7 @@
 //
 
 `define PIPE_SZ 2
-`define LONG_PIPE_SZ 9
+`define LONG_PIPE_SZ 8
 
 module clkctrl_phi2(
                input       hsclk_in,
