@@ -4,8 +4,26 @@
 // Switch stops the clock in the PHI2 state
 //
 
-`define PIPE_SZ 2
-`define LONG_PIPE_SZ 8
+// Use only a single bit retiming for the slow domain, since there is a second FF
+// in both the enable path and the clock-selected path, so at least a slow clock
+// phase to resolve any meta-stability (ie 1 slow clock phase is still >> several
+// fast clock phases resolving in the other direction)
+`define SINGLE_FF_SLOW_RETIMER 1
+
+// Define this to give a full clock cycle for the metastability resolution in stage 1 of the slow clock
+// retiming circuit, otherwise a pos edge flop is used as the first stage giving half a cycle for the
+// metastability to resolve. This is enough (tested on the BBC) and anyway is still longer than the
+// corresponding HS clock cycle has for the same purpose switching the other way.
+// `define ALL_NEGEDGE_SLOW_PIPE 1
+
+`ifdef SINGLE_FF_SLOW_RETIMER
+  `define PIPE_SZ 1
+`else
+  `define PIPE_SZ 2
+`endif
+
+// Make resync to HS as long as half a slow clock cycle
+`define LONG_PIPE_SZ 9
 
 module clkctrl_phi2(
                input       hsclk_in,
@@ -75,6 +93,16 @@ module clkctrl_phi2(
     else
       pipe_retime_ls_enable_q <= {1'b0, pipe_retime_ls_enable_q[`LONG_PIPE_SZ-1:1]};
 
+`ifdef SINGLE_FF_SLOW_RETIMER
+  always @ ( negedge  lsclk_in or posedge hs_enable_q or negedge rst_b )
+    if ( ! rst_b )
+      pipe_retime_hs_enable_q[0] <= 1'b0;
+    else if ( hs_enable_q )
+      pipe_retime_hs_enable_q[0] <= 1'b1;
+    else
+      pipe_retime_hs_enable_q[0] <= 1'b0;
+`else         
+`ifdef ALL_NEGEDGE_SLOW_PIPE
   always @ ( negedge  lsclk_in or posedge hs_enable_q or negedge rst_b )
     if ( ! rst_b )
       pipe_retime_hs_enable_q <= {`PIPE_SZ{1'b0}};
@@ -82,8 +110,25 @@ module clkctrl_phi2(
       pipe_retime_hs_enable_q <= {`PIPE_SZ{1'b1}};
     else
       pipe_retime_hs_enable_q <= {1'b0, pipe_retime_hs_enable_q[`PIPE_SZ-1:1]};
-
-
+`else
+  always @ ( posedge  lsclk_in or posedge hs_enable_q or negedge rst_b )
+    if ( ! rst_b )
+      pipe_retime_hs_enable_q[1] <= 1'b0;
+    else if ( hs_enable_q )
+      pipe_retime_hs_enable_q[1] <= 1'b1;
+    else
+      pipe_retime_hs_enable_q[1] <= 1'b0;
+  
+  always @ ( negedge  lsclk_in or posedge hs_enable_q or negedge rst_b )
+    if ( ! rst_b )
+      pipe_retime_hs_enable_q[0] <= 1'b0;
+    else if ( hs_enable_q )
+      pipe_retime_hs_enable_q[0] <= 1'b1;
+    else
+      pipe_retime_hs_enable_q[0] <= pipe_retime_hs_enable_q[1];
+`endif         
+`endif // !`ifdef SINGLE_FF_SLOW_RETIMER
+  
   // Clock Dividers
   always @ ( posedge hsclk_in  or negedge rst_b)
     if ( !rst_b )
