@@ -5,6 +5,9 @@
 // Use data latches on CPU2BBC and/or BBC2CPU data transfers to improve hold times
 //`define USE_DATA_LATCHES_BBC2CPU 1
 
+// Latch HIMEM and HISYNC signals at end of PHI1 - may be better optimized ? 
+//`define LATCH_HIMEM_HISYNC  1
+
 // Enable internal GPIO register
 //`define ENABLE_GPIO_REG  1
 
@@ -14,8 +17,10 @@
 // fix Ed's flakey BBC.
 //`define RAM_MAPPED_ON_BOOT_D 1
 
-// Depth of pipeline to delay switches to HS clock after an IO access.
-`define IO_ACCESS_DELAY_SZ             4
+// Depth of pipeline to delay switches to HS clock after an IO access. Need more cycles for
+// faster clocks so ideally this should be linked with the divider setting. Over 16MHz needs
+// 5 cycles but 13.8MHz seems ok with 4.
+`define IO_ACCESS_DELAY_SZ             5
 
 `define MAP_CC_DATA_SZ         7
 `define MAP_HSCLK_EN_IDX       6
@@ -125,6 +130,7 @@ module level1b_mk2_m (
                     .lsclk_selected(ls_selected_w),
                     .clkout(cpu_phi1_w)
                     );
+
   assign cpu_phi2_w = !cpu_phi1_w ;
   assign cpu_phi2 =  cpu_phi2_w ;
   assign bbc_phi1 = ckdel_3_b;
@@ -182,8 +188,20 @@ module level1b_mk2_m (
   // * on valid instruction fetches from himem, or
   // * on valid imm/data fetches from himem _if_ hs clock is already selected, or
   // * on invalid bus cycles if hs clock is already selected
+`ifdef LATCH_HIMEM_HISYNC
+  reg himem_lat_q ;
+  reg hisync_lat_q;  
+  always @ ( * )
+    if (!cpu_phi2_w) begin
+      himem_lat_q  <=  (cpu_vpa|cpu_vda) & (cpu_hiaddr_lat_d[7] & !himem_vram_wr_d);
+      hisync_lat_q <= (cpu_vpa&cpu_vda) & cpu_hiaddr_lat_d[7];
+    end
+  assign himem_w = himem_lat_q;
+  assign hisync_w = hisync_lat_q;
+`else // !`ifdef LATCH_HIMEM_HISYNC
   assign himem_w =  (cpu_vpa|cpu_vda) & (cpu_hiaddr_lat_q[7] & !himem_vram_wr_lat_q);
   assign hisync_w = (cpu_vpa&cpu_vda) & cpu_hiaddr_lat_q[7];
+`endif //  `ifdef LATCH_HIMEM_HISYNC
 
   assign sel_hs_w = map_data_q[`MAP_HSCLK_EN_IDX] & (( hisync_w & !io_access_pipe_q[0] ) |
                                                      ( himem_w & hs_selected_w) |
@@ -212,8 +230,7 @@ module level1b_mk2_m (
       remapped_ram_access_r = 0;
 
   assign cpu_hiaddr_lat_d[7:1] = cpu_data[7:1] | { 7{remapped_ram_access_r | remapped_rom_access_r | native_mode_int_w} };
-
-  // Remapped accesses all go too the range FE0000 - FEFFFF, so don't set the bottom bit for these
+  // Remapped accesses all go to the range FE0000 - FEFFFF, so don't set the bottom bit for these
   assign cpu_hiaddr_lat_d[0] = cpu_data[0] | native_mode_int_w;
 
   // drive cpu data if we're reading internal register or making a non dummy read from lomem
