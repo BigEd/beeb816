@@ -1,4 +1,11 @@
 `timescale 1ns / 1ns
+
+
+//
+// PCB hacks
+// 1. RAM_CEB and RAM_OEB separated
+//    RAM_OEB connected now to GPIO0
+
 // Interrupts are not handled in '816 mode so leave this undefined for now
 //`ifdef REMAP_NATIVE_INTERRUPTS_D
 
@@ -131,12 +138,14 @@ module level1b_mk2_m (
   assign ram_adr16 = cpu_hiaddr_lat_q[0] ;
   assign ram_adr17 = cpu_hiaddr_lat_q[1] ;
   assign ram_adr18 = cpu_hiaddr_lat_q[2] ;
-  assign ram_web = cpu_rnw | !cpu_hiaddr_lat_q[6] ;
   assign lat_en = !dummy_access_w;
 
   // All addresses starting 0b11 go to the on-board RAM and 0b10 to IO space, so check just bit 6
-  assign ram_ceb = !( cpu_phi2_w && cpu_hiaddr_lat_q[6] );
-
+  assign ram_ceb = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa));
+  // PCB Hack 1 - gpio[0] = ram_oeb
+  assign gpio[0] = cpu_phi1_w ;
+  assign ram_web = cpu_rnw | cpu_phi1_w ;
+  
   // All addresses starting with 0b10 go to internal IO registers which update on the
   // rising edge of cpu_phi1 - use the cpu_data bus directly for the high address
   // bits since it's stable by the end of phi1
@@ -181,8 +190,9 @@ module level1b_mk2_m (
   end
 `endif
 
-  // Check for accesses to IO space in case we need to delay switching back to HS clock
-  assign io_access_pipe_d = !cpu_hiaddr_lat_q[7] & ( &(cpu_adr[15:10]) ) & cpu_vda;
+  // Check for accesses to some of IO space (FC00-FFDF) in case we need to delay switching back to HS clock
+  // Accesses to area after FEE0 do not include the delay (faster tube access for example)
+  assign io_access_pipe_d = !cpu_hiaddr_lat_q[7] & ( &(cpu_adr[15:10]) & ! (cpu_adr[9]==1'b1 & cpu_adr[7:5]==3'b111)) & cpu_vda;
 
   // Sel the high speed clock only
   // * on valid instruction fetches from himem, or
@@ -190,7 +200,6 @@ module level1b_mk2_m (
   // * on invalid bus cycles if hs clock is already selected
   assign himem_w =  (cpu_vpa|cpu_vda) & (cpu_hiaddr_lat_q[7] & !himem_vram_wr_lat_q);
   assign hisync_w = (cpu_vpa&cpu_vda) & cpu_hiaddr_lat_q[7];
-
   assign sel_hs_w = map_data_q[`MAP_HSCLK_EN_IDX] & (( hisync_w & !io_access_pipe_q[0] ) |
                                                      ( himem_w & hs_selected_w) |
                                                      (!cpu_vpa & !cpu_vda & hs_selected_w)
