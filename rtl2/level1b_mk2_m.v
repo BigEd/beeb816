@@ -1,6 +1,4 @@
 `timescale 1ns / 1ns
-
-
 //
 // PCB hacks
 // 1. RAM_CEB and RAM_OEB separated
@@ -12,10 +10,14 @@
 // Depth of pipeline to delay switches to HS clock after an IO access. Need more cycles for
 // faster clocks so ideally this should be linked with the divider setting. Over 16MHz needs
 // 5 cycles but 13.8MHz seems ok with 4.
-`define IO_ACCESS_DELAY_SZ             5
+`define IO_ACCESS_DELAY_SZ     5
 
-`define REMAP_LOMEM_ALWAYS 1
-
+// Boot with LOMEM remapped already to on-board RAM/VRAM cached
+`define REMAP_LOMEM_ALWAYS     1
+// Set the split between LOMEM and VRAM to 12K or 8K if not defined
+`define MEM_SPLIT_12K          1
+// Slowdown return to HS clock after access to FE40 (or FC00-FEDF otherwise)
+`define SLOWDOWN_ON_FE40_ONLY  1
 
 `define MAP_CC_DATA_SZ         7
 
@@ -145,7 +147,7 @@ module level1b_mk2_m (
   // PCB Hack 1 - gpio[0] = ram_oeb
   assign gpio[0] = cpu_phi1_w ;
   assign ram_web = cpu_rnw | cpu_phi1_w ;
-  
+
   // All addresses starting with 0b10 go to internal IO registers which update on the
   // rising edge of cpu_phi1 - use the cpu_data bus directly for the high address
   // bits since it's stable by the end of phi1
@@ -165,7 +167,11 @@ module level1b_mk2_m (
       // Shadow mode, so no need to slow down for (non-remapped) VRAM accesses but must slow down
       // for LOMEM (0-8K) accesses unless MAP bit is set
       if ( !map_data_q[`MAP_RAM_IDX])
+  `ifdef MEM_SPLIT_12K
+        himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & !( !cpu_adr[14] & (!cpu_adr[13] | !cpu_adr[12]))  & !cpu_rnw  ;
+  `else
         himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & !(cpu_adr[14]|cpu_adr[13]) & !cpu_rnw  ;
+  `endif
       else
         himem_vram_wr_d = 1'b0;
     end
@@ -173,7 +179,11 @@ module level1b_mk2_m (
       // Non Shadow Mode, so caching video RAM accesses instead
       if ( map_data_q[`MAP_RAM_IDX])
         // Mark Video RAM access for slow speed writes
+  `ifdef MEM_SPLIT_12K
+        himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & !(!cpu_adr[14] & (!cpu_adr[13] | !cpu_adr[12]))  & !cpu_rnw  ;
+  `else
         himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & (cpu_adr[14]|cpu_adr[13]) & !cpu_rnw ;
+  `endif
       else
         // Mark all of BBC mem for slow write (because LOMEM is always cached)
         himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & !cpu_rnw ;
@@ -183,17 +193,24 @@ module level1b_mk2_m (
   always @ ( * ) begin
     if ( !map_data_q[`SHADOW_MEM_IDX] )
       // Also Need to mark VRAM writes for slow down unless using shadow memory
+  `ifdef MEM_SPLIT_12K
+      himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & !(!cpu_adr[14] & (!cpu_adr[13] | !cpu_adr[12]))  & !cpu_rnw  ;
+  `else
       himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & (cpu_adr[14]|cpu_adr[13]) & !cpu_rnw  ;
+  `endif
     else
       // No need to mark any other remapped RAM for slow writes
       himem_vram_wr_d = 1'b0;
   end
 `endif
 
-  // Check for accesses to some of IO space (FC00-FFDF) in case we need to delay switching back to HS clock
+  // Check for write accesses to some of IO space (FC00-FEDF) in case we need to delay switching back to HS clock
   // Accesses to area after FEE0 do not include the delay (faster tube access for example)
-  assign io_access_pipe_d = !cpu_hiaddr_lat_q[7] & ( &(cpu_adr[15:10]) & ! (cpu_adr[9]==1'b1 & cpu_adr[7:5]==3'b111)) & cpu_vda;
-
+`ifdef SLOWDOWN_ON_FE40_ONLY
+  assign io_access_pipe_d = !cpu_hiaddr_lat_q[7] & (cpu_adr[15:4]==12'hFE4) & cpu_vda ;
+`else
+  assign io_access_pipe_d = !cpu_hiaddr_lat_q[7] & ( &(cpu_adr[15:10]) & ! (cpu_adr[9]==1'b1 & cpu_adr[7:5]==3'b111)) & cpu_vda & cpu_rnw;
+`endif
   // Sel the high speed clock only
   // * on valid instruction fetches from himem, or
   // * on valid imm/data fetches from himem _if_ hs clock is already selected, or
