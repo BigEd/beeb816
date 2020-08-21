@@ -23,7 +23,7 @@
 `endif
 
 // Make resync to HS as long as half a slow clock cycle
-`define LONG_PIPE_SZ 9
+`define LONG_PIPE_SZ 10
 
 module clkctrl_phi2(
                input       hsclk_in,
