@@ -22,8 +22,8 @@
   `define PIPE_SZ 2
 `endif
 
-// Make resync to HS as long as half a slow clock cycle
-`define LONG_PIPE_SZ 10
+// Need at least 3 HS retiming cycles for faster clocks
+`define LONG_PIPE_SZ 3
 
 module clkctrl_phi2(
                input       hsclk_in,
