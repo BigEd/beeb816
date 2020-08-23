@@ -2,8 +2,10 @@
 //
 // PCB hacks
 // 1. RAM_CEB and RAM_OEB separated
-//    RAM_OEB connected now to GPIO0
-
+//    RAM_OEB connected now to GPIO0 (ie pin is still marked GPIO0 on the original mk2 PCB)
+// 2. PCB Hack 2
+//    RAM_ADR14,15 connected to GPIO1,2
+//
 // Interrupts are not handled in '816 mode so leave this undefined for now
 //`ifdef REMAP_NATIVE_INTERRUPTS_D
 
@@ -16,8 +18,13 @@
 `define REMAP_LOMEM_ALWAYS     1
 // Set the split between LOMEM and VRAM to 12K or 8K if not defined
 `define MEM_SPLIT_12K          1
-// Slowdown return to HS clock after access to FE40 (or FC00-FEDF otherwise)
-`define SLOWDOWN_ON_FE40_ONLY  1
+
+// Define this to get a clean deassertion/reassertion of RAM CEB but this limits some
+// setup time from CEB low to data valid etc. Not an issue in a board with a faster
+// SMD RAM so expect to set this in the final design, but omitting it can help with
+// speed in the proto
+//`define ASSERT_RAMCEB_IN_PHI2  1
+
 
 `define MAP_CC_DATA_SZ         7
 
@@ -29,7 +36,7 @@
 `define CLK_CPUCLK_DIV_IDX_LO  0
 
 `define BBC_PAGEREG_SZ         4    // only the bottom four ROM selection bits
-`define GPIO_SZ                2
+`define GPIO_SZ                3
 
 `define CPLD_REG_SEL_SZ        2
 `define CPLD_REG_SEL_MAP_CC_IDX 1
@@ -59,6 +66,7 @@ module level1b_mk2_m (
                       output               lat_en,
                       output               ram_web,
                       output               ram_ceb,
+                      output               ram_oeb,                      
                       output               ram_adr18,
                       output               ram_adr17,
                       output               ram_adr16,
@@ -140,14 +148,24 @@ module level1b_mk2_m (
   assign ram_adr16 = cpu_hiaddr_lat_q[0] ;
   assign ram_adr17 = cpu_hiaddr_lat_q[1] ;
   assign ram_adr18 = cpu_hiaddr_lat_q[2] ;
+  assign gpio[2] = cpu_adr[15];
+  assign gpio[1] = cpu_adr[14];  
   assign lat_en = !dummy_access_w;
 
+`ifdef ASSERT_RAMCEB_IN_PHI2
+  // All addresses starting 0b11 go to the on-board RAM and 0b10 to IO space, so check just bit 6
+  assign ram_ceb = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa) & cpu_phi2_w );
+  // PCB Hack 1 - gpio[0] = ram_oeb
+  assign gpio[0] = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa));  
+  assign ram_web = cpu_rnw;  
+`else  
   // All addresses starting 0b11 go to the on-board RAM and 0b10 to IO space, so check just bit 6
   assign ram_ceb = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa));
   // PCB Hack 1 - gpio[0] = ram_oeb
   assign gpio[0] = cpu_phi1_w ;
   assign ram_web = cpu_rnw | cpu_phi1_w ;
-
+`endif
+  
   // All addresses starting with 0b10 go to internal IO registers which update on the
   // rising edge of cpu_phi1 - use the cpu_data bus directly for the high address
   // bits since it's stable by the end of phi1
@@ -204,13 +222,10 @@ module level1b_mk2_m (
   end
 `endif
 
-  // Check for write accesses to some of IO space (FC00-FEDF) in case we need to delay switching back to HS clock
-  // Accesses to area after FEE0 do not include the delay (faster tube access for example)
-`ifdef SLOWDOWN_ON_FE40_ONLY
+  // Check for write accesses to some of IO space (FE4x) in case we need to delay switching back to HS clock
+  // so that min pulse widths to sound chip/reading IO are respected
   assign io_access_pipe_d = !cpu_hiaddr_lat_q[7] & (cpu_adr[15:4]==12'hFE4) & cpu_vda ;
-`else
-  assign io_access_pipe_d = !cpu_hiaddr_lat_q[7] & ( &(cpu_adr[15:10]) & ! (cpu_adr[9]==1'b1 & cpu_adr[7:5]==3'b111)) & cpu_vda & cpu_rnw;
-`endif
+  
   // Sel the high speed clock only
   // * on valid instruction fetches from himem, or
   // * on valid imm/data fetches from himem _if_ hs clock is already selected, or
