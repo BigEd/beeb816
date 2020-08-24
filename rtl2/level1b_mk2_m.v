@@ -25,10 +25,12 @@
 // speed in the proto
 //`define ASSERT_RAMCEB_IN_PHI2  1
 
+// Define this for the Acorn Electron instead of BBC Micro
+// `define ELECTRON
 
-`define MAP_CC_DATA_SZ         7
+`define MAP_CC_DATA_SZ         8
 
-`define SHADOW_MEM_IDX         6
+`define SHADOW_MEM_IDX         7
 `define MAP_ROM_IDX            5
 `define MAP_RAM_IDX            4
 `define MAP_HSCLK_EN_IDX       2
@@ -38,14 +40,21 @@
 `define BBC_PAGEREG_SZ         4    // only the bottom four ROM selection bits
 `define GPIO_SZ                3
 
-`define CPLD_REG_SEL_SZ        2
+`define CPLD_REG_SEL_SZ        3
 `define CPLD_REG_SEL_MAP_CC_IDX 1
 `define CPLD_REG_SEL_BBC_PAGEREG_IDX 0
+`define CPLD_REG_SEL_BBC_SHADOW_IDX 2
 
 // Address of ROM selection reg in BBC memory map
-`define BBC_PAGED_ROM_SEL 16'hFE30
-// Assume that BBC ROM is at slot FF ( or at least ends with LSBs set...)
-`define BASICROM_NUMBER 4'b1111
+`ifdef ELECTRON
+  `define PAGED_ROM_SEL 16'hFE05
+  `define BASICROM_NUMBER 4'b1011
+`else
+  `define PAGED_ROM_SEL 16'hFE30
+  // BBC B+ and Master use bit 7 of &FE34 for shadow RAM select
+  `define SHADOW_RAM_SEL 16'hFE34
+  `define BASICROM_NUMBER 4'b1111
+`endif
 
 module level1b_mk2_m (
                       input [15:0]         cpu_adr,
@@ -170,7 +179,8 @@ module level1b_mk2_m (
   // rising edge of cpu_phi1 - use the cpu_data bus directly for the high address
   // bits since it's stable by the end of phi1
   assign cpld_reg_sel_d[`CPLD_REG_SEL_MAP_CC_IDX] = cpu_vda && ( cpu_data[7:6]== 2'b10) && ( cpu_adr[1:0] == 2'b11);
-  assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = cpu_vda && (cpu_data[7]== 1'b0) && ( cpu_adr == `BBC_PAGED_ROM_SEL );
+  assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = cpu_vda && (cpu_data[7]== 1'b0) && ( cpu_adr == `PAGED_ROM_SEL );
+  assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_SHADOW_IDX] = cpu_vda && (cpu_data[7]== 1'b0) && ( cpu_adr == `SHADOW_RAM_SEL );
 
   // Force dummy read access when accessing himem explicitly but not for remapped RAM accesses which can still complete
   assign bbc_adr = ( dummy_access_w ) ? {8'h80} : cpu_adr[15:8] ;
@@ -243,12 +253,10 @@ module level1b_mk2_m (
     // Split ROM and MOS identification to allow them to go to different banks later
     remapped_mos_access_r = 0;
     remapped_rom_access_r = 0;
-
     if (!cpu_data[7] & map_data_q[`MAP_ROM_IDX] & cpu_adr[15] & (cpu_vpa|cpu_vda)) begin
       // Remap MOS from C000-FBFF only (exclude IO space and vectors)
       if ( cpu_adr[14] & !(&(cpu_adr[13:10])))
         remapped_mos_access_r = 1;
-
       if ( !cpu_adr[14] & (bbc_pagereg_q[`BBC_PAGEREG_SZ-1:0] == `BASICROM_NUMBER))
         remapped_rom_access_r = 1;
     end
@@ -288,7 +296,7 @@ module level1b_mk2_m (
   always @ ( * )
     if ( cpu_phi2_w & cpu_rnw )
       begin
-	if (cpu_hiaddr_lat_q[7])
+	if (cpu_hiaddr_lat_q[7]) begin
 	  if (cpld_reg_sel_q[`CPLD_REG_SEL_MAP_CC_IDX] ) begin
             // Not all bits are used so assign default first, then individual bits
 	    cpu_data_r = 8'b0  ;
@@ -301,6 +309,7 @@ module level1b_mk2_m (
           end
           else //must be RAM access
             cpu_data_r = {8{1'bz}};
+        end        
         else
           cpu_data_r = bbc_data;
       end
@@ -331,6 +340,8 @@ module level1b_mk2_m (
         end
         else if (cpld_reg_sel_q[`CPLD_REG_SEL_BBC_PAGEREG_IDX] & !cpu_rnw )
           bbc_pagereg_q <= cpu_data;
+        else if (cpld_reg_sel_q[`CPLD_REG_SEL_BBC_SHADOW_IDX] & !cpu_rnw )
+          map_data_q[`SHADOW_MEM_IDX] <= cpu_data[`SHADOW_MEM_IDX];
       end // else: !if( !resetb )
 
 
