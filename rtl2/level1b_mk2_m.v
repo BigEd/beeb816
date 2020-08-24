@@ -16,8 +16,6 @@
 
 // Boot with LOMEM remapped already to on-board RAM/VRAM cached
 `define REMAP_LOMEM_ALWAYS     1
-// Set the split between LOMEM and VRAM to 12K or 8K if not defined
-`define MEM_SPLIT_12K          1
 
 // Define this to get a clean deassertion/reassertion of RAM CEB but this limits some
 // setup time from CEB low to data valid etc. Not an issue in a board with a faster
@@ -26,10 +24,13 @@
 //`define ASSERT_RAMCEB_IN_PHI2  1
 
 // Define this for the Acorn Electron instead of BBC Micro
-// `define ELECTRON
+// `define ELECTRON 1
+
+// Define this for BBC B+/Master Shadow RAM control
+//`define MASTER_SHADOW_CTRL 1
+
 
 `define MAP_CC_DATA_SZ         8
-
 `define SHADOW_MEM_IDX         7
 `define MAP_ROM_IDX            5
 `define MAP_RAM_IDX            4
@@ -40,10 +41,15 @@
 `define BBC_PAGEREG_SZ         4    // only the bottom four ROM selection bits
 `define GPIO_SZ                3
 
+`ifdef MASTER_SHADOW_CTRL
 `define CPLD_REG_SEL_SZ        3
+`define CPLD_REG_SEL_BBC_SHADOW_IDX 2
+`else
+`define CPLD_REG_SEL_SZ        2
 `define CPLD_REG_SEL_MAP_CC_IDX 1
 `define CPLD_REG_SEL_BBC_PAGEREG_IDX 0
-`define CPLD_REG_SEL_BBC_SHADOW_IDX 2
+`endif
+
 
 // Address of ROM selection reg in BBC memory map
 `ifdef ELECTRON
@@ -180,8 +186,10 @@ module level1b_mk2_m (
   // bits since it's stable by the end of phi1
   assign cpld_reg_sel_d[`CPLD_REG_SEL_MAP_CC_IDX] = cpu_vda && ( cpu_data[7:6]== 2'b10) && ( cpu_adr[1:0] == 2'b11);
   assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = cpu_vda && (cpu_data[7]== 1'b0) && ( cpu_adr == `PAGED_ROM_SEL );
+`ifdef MASTER_SHADOW_CTRL  
   assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_SHADOW_IDX] = cpu_vda && (cpu_data[7]== 1'b0) && ( cpu_adr == `SHADOW_RAM_SEL );
-
+`endif
+  
   // Force dummy read access when accessing himem explicitly but not for remapped RAM accesses which can still complete
   assign bbc_adr = ( dummy_access_w ) ? {8'h80} : cpu_adr[15:8] ;
   assign bbc_rnw = cpu_rnw | dummy_access_w ;
@@ -195,11 +203,7 @@ module level1b_mk2_m (
       // Shadow mode, so no need to slow down for (non-remapped) VRAM accesses but must slow down
       // for LOMEM (0-8K) accesses unless MAP bit is set
       if ( !map_data_q[`MAP_RAM_IDX])
-  `ifdef MEM_SPLIT_12K
         himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & !( !cpu_adr[14] & (!cpu_adr[13] | !cpu_adr[12]))  & !cpu_rnw  ;
-  `else
-        himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & !(cpu_adr[14]|cpu_adr[13]) & !cpu_rnw  ;
-  `endif
       else
         himem_vram_wr_d = 1'b0;
     end
@@ -207,11 +211,7 @@ module level1b_mk2_m (
       // Non Shadow Mode, so caching video RAM accesses instead
       if ( map_data_q[`MAP_RAM_IDX])
         // Mark Video RAM access for slow speed writes
-  `ifdef MEM_SPLIT_12K
         himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & !(!cpu_adr[14] & (!cpu_adr[13] | !cpu_adr[12]))  & !cpu_rnw  ;
-  `else
-        himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & (cpu_adr[14]|cpu_adr[13]) & !cpu_rnw ;
-  `endif
       else
         // Mark all of BBC mem for slow write (because LOMEM is always cached)
         himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & !cpu_rnw ;
@@ -221,11 +221,7 @@ module level1b_mk2_m (
   always @ ( * ) begin
     if ( !map_data_q[`SHADOW_MEM_IDX] )
       // Also Need to mark VRAM writes for slow down unless using shadow memory
-  `ifdef MEM_SPLIT_12K
       himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & !(!cpu_adr[14] & (!cpu_adr[13] | !cpu_adr[12]))  & !cpu_rnw  ;
-  `else
-      himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & (cpu_adr[14]|cpu_adr[13]) & !cpu_rnw  ;
-  `endif
     else
       // No need to mark any other remapped RAM for slow writes
       himem_vram_wr_d = 1'b0;
@@ -340,8 +336,10 @@ module level1b_mk2_m (
         end
         else if (cpld_reg_sel_q[`CPLD_REG_SEL_BBC_PAGEREG_IDX] & !cpu_rnw )
           bbc_pagereg_q <= cpu_data;
+`ifdef MASTER_SHADOW_CTRL        
         else if (cpld_reg_sel_q[`CPLD_REG_SEL_BBC_SHADOW_IDX] & !cpu_rnw )
           map_data_q[`SHADOW_MEM_IDX] <= cpu_data[`SHADOW_MEM_IDX];
+`endif        
       end // else: !if( !resetb )
 
 
