@@ -81,7 +81,7 @@ module level1b_mk2_m (
                       output               lat_en,
                       output               ram_web,
                       output               ram_ceb,
-                      output               ram_oeb,                      
+                      output               ram_oeb,
                       output               ram_adr18,
                       output               ram_adr17,
                       output               ram_adr16,
@@ -164,37 +164,36 @@ module level1b_mk2_m (
   assign ram_adr17 = cpu_hiaddr_lat_q[1] ;
   assign ram_adr18 = cpu_hiaddr_lat_q[2] ;
   assign gpio[2] = cpu_adr[15];
-  assign gpio[1] = cpu_adr[14];  
+  assign gpio[1] = cpu_adr[14];
   assign lat_en = !dummy_access_w;
 
 `ifdef ASSERT_RAMCEB_IN_PHI2
   // All addresses starting 0b11 go to the on-board RAM and 0b10 to IO space, so check just bit 6
   assign ram_ceb = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa) & cpu_phi2_w );
   // PCB Hack 1 - gpio[0] = ram_oeb
-  assign gpio[0] = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa));  
-  assign ram_web = cpu_rnw;  
-`else  
+  assign gpio[0] = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa));
+  assign ram_web = cpu_rnw;
+`else
   // All addresses starting 0b11 go to the on-board RAM and 0b10 to IO space, so check just bit 6
   assign ram_ceb = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa));
   // PCB Hack 1 - gpio[0] = ram_oeb
   assign gpio[0] = cpu_phi1_w ;
   assign ram_web = cpu_rnw | cpu_phi1_w ;
 `endif
-  
+
   // All addresses starting with 0b10 go to internal IO registers which update on the
   // rising edge of cpu_phi1 - use the cpu_data bus directly for the high address
   // bits since it's stable by the end of phi1
   assign cpld_reg_sel_d[`CPLD_REG_SEL_MAP_CC_IDX] = cpu_vda && ( cpu_data[7:6]== 2'b10) && ( cpu_adr[1:0] == 2'b11);
   assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = cpu_vda && (cpu_data[7]== 1'b0) && ( cpu_adr == `PAGED_ROM_SEL );
-`ifdef MASTER_SHADOW_CTRL  
+`ifdef MASTER_SHADOW_CTRL
   assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_SHADOW_IDX] = cpu_vda && (cpu_data[7]== 1'b0) && ( cpu_adr == `SHADOW_RAM_SEL );
 `endif
-  
+
   // Force dummy read access when accessing himem explicitly but not for remapped RAM accesses which can still complete
   assign bbc_adr = ( dummy_access_w ) ? {8'h80} : cpu_adr[15:8] ;
   assign bbc_rnw = cpu_rnw | dummy_access_w ;
-
-  assign bbc_data = ( !bbc_rnw & bbc_phi0 & bbc_phi2 & !hs_selected_w) ? cpu_data : { 8{1'bz}};
+  assign bbc_data = ( !bbc_rnw & bbc_phi2 ) ? cpu_data : { 8{1'bz}};
   assign cpu_data = cpu_data_r;
 
 `ifdef REMAP_LOMEM_ALWAYS
@@ -231,7 +230,7 @@ module level1b_mk2_m (
   // Check for write accesses to some of IO space (FE4x) in case we need to delay switching back to HS clock
   // so that min pulse widths to sound chip/reading IO are respected
   assign io_access_pipe_d = !cpu_hiaddr_lat_q[7] & (cpu_adr[15:4]==12'hFE4) & cpu_vda ;
-  
+
   // Sel the high speed clock only
   // * on valid instruction fetches from himem, or
   // * on valid imm/data fetches from himem _if_ hs clock is already selected, or
@@ -305,7 +304,7 @@ module level1b_mk2_m (
           end
           else //must be RAM access
             cpu_data_r = {8{1'bz}};
-        end        
+        end
         else
           cpu_data_r = bbc_data;
       end
@@ -336,10 +335,10 @@ module level1b_mk2_m (
         end
         else if (cpld_reg_sel_q[`CPLD_REG_SEL_BBC_PAGEREG_IDX] & !cpu_rnw )
           bbc_pagereg_q <= cpu_data;
-`ifdef MASTER_SHADOW_CTRL        
+`ifdef MASTER_SHADOW_CTRL
         else if (cpld_reg_sel_q[`CPLD_REG_SEL_BBC_SHADOW_IDX] & !cpu_rnw )
           map_data_q[`SHADOW_MEM_IDX] <= cpu_data[`SHADOW_MEM_IDX];
-`endif        
+`endif
       end // else: !if( !resetb )
 
 
