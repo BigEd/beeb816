@@ -6,8 +6,14 @@
 // impact on cycle by cycle performance.
 `define HS_PIPE_SZ 4
 
-// Number of retiming steps of slow clock for hs clock enable, N must be >= 2. 
-`define LS_PIPE_SZ 2
+// Number of retiming steps of slow clock for hs clock enable, N must be >= 2
+// at higher speeds esp with -15ns parts
+`define SINGLE_LS_RETIMER 1
+`ifdef SINGLE_LS_RETIMER
+  `define LS_PIPE_SZ 1
+`else
+  `define LS_PIPE_SZ 2
+`endif
 
 module clkctrl_phi2(
                input       hsclk_in,
@@ -23,17 +29,17 @@ module clkctrl_phi2(
   reg                     hsclk_by2_q, hsclk_by4_q, hsclk_by8_q;
   reg                     cpuclk_r;
   reg                     hs_enable_q, ls_enable_q;
+  reg                     selected_ls_q;
   reg [`HS_PIPE_SZ-1:0]   pipe_retime_ls_enable_q;
   reg [`LS_PIPE_SZ-1:0]   pipe_retime_hs_enable_q;
+  
 
   wire                    retimed_ls_enable_w = pipe_retime_ls_enable_q[0];
   wire                    retimed_hs_enable_w = pipe_retime_hs_enable_q[0];
 
   assign clkout = (cpuclk_r & hs_enable_q ) | (lsclk_in & ls_enable_q);
-  // hs_clk_selected goes high as soon as the LS clock is stopped
-  assign hsclk_selected = !retimed_ls_enable_w;
-  // ls_clk_selected goes high as soon as the HS clock is stopped  
-  assign lsclk_selected = !retimed_hs_enable_w;
+  assign lsclk_selected = selected_ls_q;
+  assign hsclk_selected = hs_enable_q;
 
   always @ ( * )
     case (cpuclk_div_sel)
@@ -43,6 +49,13 @@ module clkctrl_phi2(
       2'b11 : cpuclk_r = hsclk_by8_q;
       default: cpuclk_r = 1'bx;
     endcase // case (cpuclk_div_sel)
+
+  // Selected LS signal must change on posedge of clock
+  always @ (posedge lsclk_in or negedge rst_b)
+    if ( ! rst_b )
+      selected_ls_q <= 1'b1;
+    else
+      selected_ls_q <= !hsclk_sel & !retimed_hs_enable_w;
   
   always @ ( negedge cpuclk_r or negedge rst_b )
     if ( ! rst_b )
@@ -61,13 +74,17 @@ module clkctrl_phi2(
       pipe_retime_ls_enable_q <= {`HS_PIPE_SZ{1'b1}};
     else
       pipe_retime_ls_enable_q <= {!pipe_retime_hs_enable_q[0], pipe_retime_ls_enable_q[`HS_PIPE_SZ-1:1]};
-         
-  always @ ( negedge  lsclk_in or posedge hsclk_sel )    
-    if ( hsclk_sel )
+ 
+  always @ ( negedge  lsclk_in or posedge hs_enable_q ) 
+    if ( hs_enable_q )
       pipe_retime_hs_enable_q <= {`LS_PIPE_SZ{1'b1}};
     else
-      pipe_retime_hs_enable_q <= {1'b0, pipe_retime_hs_enable_q[`LS_PIPE_SZ-1:1]};
-  
+`ifdef SINGLE_LS_RETIMER
+      pipe_retime_hs_enable_q <= hsclk_sel;
+`else      
+      pipe_retime_hs_enable_q <= {hsclk_sel, pipe_retime_hs_enable_q[`LS_PIPE_SZ-1:1]};
+`endif
+         
   // Clock Dividers
   always @ ( posedge hsclk_in  or negedge rst_b)
     if ( !rst_b )
