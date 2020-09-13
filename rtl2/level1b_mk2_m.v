@@ -102,12 +102,10 @@ module level1b_mk2_m (
   // This will be a copy of the BBC ROM page register so we know which ROM is selected
   reg [`BBC_PAGEREG_SZ-1:0]            bbc_pagereg_q;
   reg [`MAP_CC_DATA_SZ-1:0]            map_data_q;
-  reg                                  remapped_rom47_access_lat_d ;
-  reg                                  remapped_romCF_access_lat_d ;
-  reg                                  remapped_romCF_access_lat_q ;
-  reg                                  remapped_mos_access_lat_d ;
-  reg                                  remapped_mos_access_lat_q ;
-  reg                                  remapped_ram_access_lat_d ;
+  reg                                  remapped_rom47_access_r ;
+  reg                                  remapped_romCF_access_r ;
+  reg                                  remapped_mos_access_r ;
+  reg                                  remapped_ram_access_r ;
   reg                                  cpu_a15_lat_d;
   reg                                  cpu_a14_lat_d;
   reg                                  cpu_a15_lat_q;
@@ -184,7 +182,7 @@ module level1b_mk2_m (
   assign ram_ceb = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa));
   // PCB Hack 1 - gpio[0] = ram_oeb
   assign gpio[0] = cpu_phi1_w ;
-  assign ram_web = cpu_rnw | cpu_phi1_w ;
+  assign ram_web = cpu_rnw | cpu_phi1_w; // Write protect remapped MOS + ROMS C-F
 `endif
 
   // All addresses starting with 0b10 go to internal IO registers which update on the
@@ -241,37 +239,31 @@ module level1b_mk2_m (
   // ROM remapping
   always @ ( * ) begin
     // Split ROM and MOS identification to allow them to go to different banks later
-    remapped_mos_access_lat_d = 0;
-    remapped_rom47_access_lat_d = 0;
-    remapped_romCF_access_lat_d = 0;
-    if (!cpu_data[7] & map_data_q[`MAP_ROM_IDX] & cpu_adr[15] & (cpu_vpa|cpu_vda)) begin
+    remapped_mos_access_r = 0;
+    remapped_rom47_access_r = 0;
+    remapped_romCF_access_r = 0;
+    // Remap only reads as a form of write protection
+    if (!cpu_data[7] & map_data_q[`MAP_ROM_IDX] & cpu_adr[15] & (cpu_vpa|cpu_vda) & cpu_rnw) begin
       // Remap MOS from C000-FBFF only (exclude IO space and vectors)
       if ( cpu_adr[14] & !(&(cpu_adr[13:10])))
-        remapped_mos_access_lat_d = 1;
+        remapped_mos_access_r = 1;
       else if (!cpu_adr[14] ) begin
         if ( bbc_pagereg_q[3:2] == 2'b11)
-          remapped_romCF_access_lat_d = 1;
+          remapped_romCF_access_r = 1;
         else if (bbc_pagereg_q[3:2] == 2'b01)
-          remapped_rom47_access_lat_d = 1;
+          remapped_rom47_access_r = 1;
       end
     end
   end
 
   always @ ( * ) begin
-    if ( map_data_q[`SHADOW_MEM_IDX] ) begin
-      // Always remap memory 0-8K when enabled, but only remap 8K-32K when not being accessed by MOS
-      if (!cpu_data[7] & !cpu_adr[15] & ( !(cpu_adr[14]|cpu_adr[13])  | !mos_vdu_sync_q ))
-        remapped_ram_access_lat_d = 1;
-      else
-        remapped_ram_access_lat_d = 0;
-    end
-    else begin
-      if (!cpu_data[7] & !cpu_adr[15])
-        remapped_ram_access_lat_d = 1;
-      else
-        remapped_ram_access_lat_d = 0;
-    end
-  end // always @ ( * )
+    if ( map_data_q[`SHADOW_MEM_IDX] )
+      // Always remap memory 0-12K in shadow mode, but only remap 12K-32K when not being accessed by MOS VDU routines
+      remapped_ram_access_r  = (!cpu_data[7] & !cpu_adr[15] & ( !(cpu_adr[14]|cpu_adr[13])  | !mos_vdu_sync_q ));
+    else
+      // Remap all of memory
+      remapped_ram_access_r = (!cpu_data[7] & !cpu_adr[15]);
+  end
 
   always @ ( * ) begin
     // Default assignments
@@ -283,16 +275,16 @@ module level1b_mk2_m (
     if ( native_mode_int_w )
       cpu_hiaddr_lat_d = 8'hFF;
     // All remapped RAM/Mos accesses to 8'b1110x110
-    else if ( remapped_ram_access_lat_d | remapped_mos_access_lat_d)
+    else if ( remapped_ram_access_r | remapped_mos_access_r)
       cpu_hiaddr_lat_d = 8'hEE;
     // All remapped ROM slots 4-7 accesses to 8'b1110x100
-    else if (remapped_rom47_access_lat_d) begin
+    else if (remapped_rom47_access_r) begin
       cpu_hiaddr_lat_d = 8'hEC;
       cpu_a15_lat_d = bbc_pagereg_q[1];
       cpu_a14_lat_d = bbc_pagereg_q[0];
     end
     // All remapped ROM slots C-F accesses to 8'b1110x101
-    else if (remapped_romCF_access_lat_d) begin
+    else if (remapped_romCF_access_r) begin
       cpu_hiaddr_lat_d = 8'hED;
       cpu_a15_lat_d = bbc_pagereg_q[1];
       cpu_a14_lat_d = bbc_pagereg_q[0];
@@ -386,8 +378,6 @@ module level1b_mk2_m (
         cpu_a15_lat_q <= cpu_a15_lat_d;
         cpu_a14_lat_q <= cpu_a14_lat_d;
         himem_vram_wr_lat_q <= himem_vram_wr_d;
-        remapped_romCF_access_lat_q  <= remapped_romCF_access_lat_d;
-        remapped_mos_access_lat_q  <= remapped_mos_access_lat_d;
       end
 
 endmodule // level1b_m
