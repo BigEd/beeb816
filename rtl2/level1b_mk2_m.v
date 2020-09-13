@@ -54,12 +54,10 @@
 // Address of ROM selection reg in BBC memory map
 `ifdef ELECTRON
   `define PAGED_ROM_SEL 16'hFE05
-  `define BASICROM_NUMBER 4'b1011
 `else
   `define PAGED_ROM_SEL 16'hFE30
   // BBC B+ and Master use bit 7 of &FE34 for shadow RAM select
   `define SHADOW_RAM_SEL 16'hFE34
-  `define BASICROM_NUMBER 4'b1111
 `endif
 
 module level1b_mk2_m (
@@ -95,7 +93,7 @@ module level1b_mk2_m (
 
   reg [7:0]                            cpu_hiaddr_lat_q;
   reg [7:0]                            cpu_data_r;
-  reg                                  mos_sync_q;
+  reg                                  mos_vdu_sync_q;
   reg                                  himem_vram_wr_lat_q;
   reg                                  himem_vram_wr_d;
 
@@ -104,14 +102,21 @@ module level1b_mk2_m (
   // This will be a copy of the BBC ROM page register so we know which ROM is selected
   reg [`BBC_PAGEREG_SZ-1:0]            bbc_pagereg_q;
   reg [`MAP_CC_DATA_SZ-1:0]            map_data_q;
-  reg                                  remapped_rom_access_r ;
-  reg                                  remapped_mos_access_r ;
-  reg                                  remapped_ram_access_r ;
+  reg                                  remapped_rom47_access_lat_d ;
+  reg                                  remapped_romCF_access_lat_d ;
+  reg                                  remapped_romCF_access_lat_q ;
+  reg                                  remapped_mos_access_lat_d ;
+  reg                                  remapped_mos_access_lat_q ;
+  reg                                  remapped_ram_access_lat_d ;
+  reg                                  cpu_a15_lat_d;
+  reg                                  cpu_a14_lat_d;
+  reg                                  cpu_a15_lat_q;
+  reg                                  cpu_a14_lat_q;
+  reg [7:0]                            cpu_hiaddr_lat_d;
   reg [ `IO_ACCESS_DELAY_SZ-1:0]       io_access_pipe_q;
   wire                                 io_access_pipe_d;
 
   wire [ `CPLD_REG_SEL_SZ-1:0]         cpld_reg_sel_d;
-  wire [7:0]                           cpu_hiaddr_lat_d;
   wire                                 rdy_w;
   wire                                 cpu_phi1_w;
   wire                                 cpu_phi2_w;
@@ -163,16 +168,17 @@ module level1b_mk2_m (
   assign ram_adr16 = cpu_hiaddr_lat_q[0] ;
   assign ram_adr17 = cpu_hiaddr_lat_q[1] ;
   assign ram_adr18 = cpu_hiaddr_lat_q[2] ;
-  assign gpio[2] = cpu_adr[15];
-  assign gpio[1] = cpu_adr[14];
+  // Override address bits A14/A15 when accessing remapped ROMs
+  assign gpio[2] = cpu_a15_lat_q;
+  assign gpio[1] = cpu_a14_lat_q;
   assign lat_en = !dummy_access_w;
 
 `ifdef ASSERT_RAMCEB_IN_PHI2
   // All addresses starting 0b11 go to the on-board RAM and 0b10 to IO space, so check just bit 6
   assign ram_ceb = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa) & cpu_phi2_w );
   // PCB Hack 1 - gpio[0] = ram_oeb
-  assign gpio[0] = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa));
-  assign ram_web = cpu_rnw;
+  assign gpio[0] = ram_ceb;
+  assign ram_web = cpu_rnw ;
 `else
   // All addresses starting 0b11 go to the on-board RAM and 0b10 to IO space, so check just bit 6
   assign ram_ceb = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa));
@@ -196,11 +202,10 @@ module level1b_mk2_m (
   assign bbc_data = ( !bbc_rnw & bbc_phi2 ) ? cpu_data : { 8{1'bz}};
   assign cpu_data = cpu_data_r;
 
-`ifdef REMAP_LOMEM_ALWAYS
   always @ ( * ) begin
     if ( map_data_q[`SHADOW_MEM_IDX] ) begin
       // Shadow mode, so no need to slow down for (non-remapped) VRAM accesses but must slow down
-      // for LOMEM (0-8K) accesses unless MAP bit is set
+      // for LOMEM (0-12K) accesses unless MAP bit is set
       if ( !map_data_q[`MAP_RAM_IDX])
         himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & !( !cpu_adr[14] & (!cpu_adr[13] | !cpu_adr[12]))  & !cpu_rnw  ;
       else
@@ -216,16 +221,6 @@ module level1b_mk2_m (
         himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & !cpu_rnw ;
     end
   end
-`else // LOMEM (0-8K) is fully remapped
-  always @ ( * ) begin
-    if ( !map_data_q[`SHADOW_MEM_IDX] )
-      // Also Need to mark VRAM writes for slow down unless using shadow memory
-      himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & !(!cpu_adr[14] & (!cpu_adr[13] | !cpu_adr[12]))  & !cpu_rnw  ;
-    else
-      // No need to mark any other remapped RAM for slow writes
-      himem_vram_wr_d = 1'b0;
-  end
-`endif
 
   // Check for write accesses to some of IO space (FE4x) in case we need to delay switching back to HS clock
   // so that min pulse widths to sound chip/reading IO are respected
@@ -246,46 +241,64 @@ module level1b_mk2_m (
   // ROM remapping
   always @ ( * ) begin
     // Split ROM and MOS identification to allow them to go to different banks later
-    remapped_mos_access_r = 0;
-    remapped_rom_access_r = 0;
+    remapped_mos_access_lat_d = 0;
+    remapped_rom47_access_lat_d = 0;
+    remapped_romCF_access_lat_d = 0;
     if (!cpu_data[7] & map_data_q[`MAP_ROM_IDX] & cpu_adr[15] & (cpu_vpa|cpu_vda)) begin
       // Remap MOS from C000-FBFF only (exclude IO space and vectors)
       if ( cpu_adr[14] & !(&(cpu_adr[13:10])))
-        remapped_mos_access_r = 1;
-      if ( !cpu_adr[14] & (bbc_pagereg_q[`BBC_PAGEREG_SZ-1:0] == `BASICROM_NUMBER))
-        remapped_rom_access_r = 1;
+        remapped_mos_access_lat_d = 1;
+      else if (!cpu_adr[14] ) begin
+        if ( bbc_pagereg_q[3:2] == 2'b11)
+          remapped_romCF_access_lat_d = 1;
+        else if (bbc_pagereg_q[3:2] == 2'b01)
+          remapped_rom47_access_lat_d = 1;
+      end
     end
   end
 
   always @ ( * ) begin
     if ( map_data_q[`SHADOW_MEM_IDX] ) begin
       // Always remap memory 0-8K when enabled, but only remap 8K-32K when not being accessed by MOS
-`ifdef REMAP_LOMEM_ALWAYS
-      if (!cpu_data[7] & !cpu_adr[15] & ( !(cpu_adr[14]|cpu_adr[13])  | !mos_sync_q ))
-        remapped_ram_access_r = 1;
-`else
-      if (!cpu_data[7] & map_data_q[`MAP_RAM_IDX] & !cpu_adr[15] & ( !(cpu_adr[14]|cpu_adr[13])  | !mos_sync_q ))
-        remapped_ram_access_r = 1;
-`endif
+      if (!cpu_data[7] & !cpu_adr[15] & ( !(cpu_adr[14]|cpu_adr[13])  | !mos_vdu_sync_q ))
+        remapped_ram_access_lat_d = 1;
       else
-        remapped_ram_access_r = 0;
+        remapped_ram_access_lat_d = 0;
     end
     else begin
-`ifdef REMAP_LOMEM_ALWAYS
       if (!cpu_data[7] & !cpu_adr[15])
-        remapped_ram_access_r = 1;
-`else
-      if (!cpu_data[7] & map_data_q[`MAP_RAM_IDX] & !cpu_adr[15] )
-        remapped_ram_access_r = 1;
-`endif
+        remapped_ram_access_lat_d = 1;
       else
-        remapped_ram_access_r = 0;
+        remapped_ram_access_lat_d = 0;
     end
   end // always @ ( * )
 
-  assign cpu_hiaddr_lat_d[7:1] = cpu_data[7:1] | { 7{remapped_ram_access_r | remapped_rom_access_r | remapped_mos_access_r | native_mode_int_w} };
-  // Remapped accesses all go to the range FE0000 - FEFFFF, so don't set the bottom bit for these
-  assign cpu_hiaddr_lat_d[0] = cpu_data[0] | native_mode_int_w;
+  always @ ( * ) begin
+    // Default assignments
+    cpu_a15_lat_d = cpu_adr[15];
+    cpu_a14_lat_d = cpu_adr[14];
+    cpu_hiaddr_lat_d = cpu_data;
+
+    // Native mode interrupts go to bank 0xFF (with other native 816 code)
+    if ( native_mode_int_w )
+      cpu_hiaddr_lat_d = 8'hFF;
+    // All remapped RAM/Mos accesses to 8'b1110x110
+    else if ( remapped_ram_access_lat_d | remapped_mos_access_lat_d)
+      cpu_hiaddr_lat_d = 8'hEE;
+    // All remapped ROM slots 4-7 accesses to 8'b1110x100
+    else if (remapped_rom47_access_lat_d) begin
+      cpu_hiaddr_lat_d = 8'hEC;
+      cpu_a15_lat_d = bbc_pagereg_q[1];
+      cpu_a14_lat_d = bbc_pagereg_q[0];
+    end
+    // All remapped ROM slots C-F accesses to 8'b1110x101
+    else if (remapped_romCF_access_lat_d) begin
+      cpu_hiaddr_lat_d = 8'hED;
+      cpu_a15_lat_d = bbc_pagereg_q[1];
+      cpu_a14_lat_d = bbc_pagereg_q[0];
+    end
+
+  end
 
   // drive cpu data if we're reading internal register or making a non dummy read from lomem
   always @ ( * )
@@ -359,11 +372,10 @@ module level1b_mk2_m (
       io_access_pipe_q <= ( io_access_pipe_q >> 1 )| {`IO_ACCESS_DELAY_SZ{ io_access_pipe_d }};
   end
 
-  // Instruction was fetched from VDU routines in MOS if in the range FEC000 - FEDFFF (if remapped to himem)
-  // or in range 00C000 - 00DFFF if ROM remapping disabled. ie can simplify deocoding here to say if in
-  // bank 8'bxxxxxxx0 (matches FE and 00) since we don't have instruction RAM anywhere else other than FF for native accesses
+  // Instruction was fetched from VDU routines in MOS if in the range EEC000 - EEDFFF (if remapped to himem)
+  // or in range 00C000 - 00DFFF if ROM remapping disabled.
   always @ ( negedge cpu_phi2_w )
-    mos_sync_q <= (cpu_vpa & cpu_vda) ? ( !cpu_hiaddr_lat_q[0] & (cpu_adr[15:13]==3'b110)) : mos_sync_q;
+    mos_vdu_sync_q <= (cpu_vpa & cpu_vda) ? ( (cpu_hiaddr_lat_q==8'h0 || cpu_hiaddr_lat_q==8'hEE) & (cpu_adr[15:13]==3'b110)) : mos_vdu_sync_q;
 
 
   // Latches for the high address bits open during PHI1
@@ -371,7 +383,11 @@ module level1b_mk2_m (
     if ( !cpu_phi2_w )
       begin
         cpu_hiaddr_lat_q <= cpu_hiaddr_lat_d;
+        cpu_a15_lat_q <= cpu_a15_lat_d;
+        cpu_a14_lat_q <= cpu_a14_lat_d;
         himem_vram_wr_lat_q <= himem_vram_wr_d;
+        remapped_romCF_access_lat_q  <= remapped_romCF_access_lat_d;
+        remapped_mos_access_lat_q  <= remapped_mos_access_lat_d;
       end
 
 endmodule // level1b_m
