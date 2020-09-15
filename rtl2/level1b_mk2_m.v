@@ -29,11 +29,9 @@
 // Define this for BBC B+/Master Shadow RAM control
 //`define MASTER_SHADOW_CTRL 1
 
-
 `define MAP_CC_DATA_SZ         8
 `define SHADOW_MEM_IDX         7
-`define MAP_ROM_IDX            5
-`define MAP_RAM_IDX            4
+`define MAP_ROM_IDX            4
 `define MAP_HSCLK_EN_IDX       2
 `define CLK_CPUCLK_DIV_IDX_HI  1
 `define CLK_CPUCLK_DIV_IDX_LO  0
@@ -201,23 +199,13 @@ module level1b_mk2_m (
   assign cpu_data = cpu_data_r;
 
   always @ ( * ) begin
-    if ( map_data_q[`SHADOW_MEM_IDX] ) begin
-      // Shadow mode, so no need to slow down for (non-remapped) VRAM accesses but must slow down
-      // for LOMEM (0-12K) accesses unless MAP bit is set
-      if ( !map_data_q[`MAP_RAM_IDX])
-        himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & !( !cpu_adr[14] & (!cpu_adr[13] | !cpu_adr[12]))  & !cpu_rnw  ;
-      else
-        himem_vram_wr_d = 1'b0;
-    end
-    else begin
+    if ( map_data_q[`SHADOW_MEM_IDX] )
+      // In shadow mode video memory is never remapped so don't mark any of RAM for slow down
+      himem_vram_wr_d = 1'b0;
+    else
       // Non Shadow Mode, so caching video RAM accesses instead
-      if ( map_data_q[`MAP_RAM_IDX])
-        // Mark Video RAM access for slow speed writes
-        himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & !(!cpu_adr[14] & (!cpu_adr[13] | !cpu_adr[12]))  & !cpu_rnw  ;
-      else
-        // Mark all of BBC mem for slow write (because LOMEM is always cached)
-        himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & !cpu_rnw ;
-    end
+      // Mark only Video RAM access for slow speed writes = 0x3000-0x7FFF
+      himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | (cpu_adr[13]&cpu_adr[12]))  & !cpu_rnw  ;
   end
 
   // Check for write accesses to some of IO space (FE4x) in case we need to delay switching back to HS clock
@@ -228,12 +216,13 @@ module level1b_mk2_m (
   // * on valid instruction fetches from himem, or
   // * on valid imm/data fetches from himem _if_ hs clock is already selected, or
   // * on invalid bus cycles if hs clock is already selected
-  assign himem_w =  (cpu_vpa|cpu_vda) & (cpu_hiaddr_lat_q[7] & !himem_vram_wr_lat_q);
+  assign himem_w =  cpu_hiaddr_lat_q[7] & !himem_vram_wr_lat_q;
   assign hisync_w = (cpu_vpa&cpu_vda) & cpu_hiaddr_lat_q[7];
   assign sel_hs_w = map_data_q[`MAP_HSCLK_EN_IDX] & (( hisync_w & !io_access_pipe_q[0] ) |
                                                      ( himem_w & hs_selected_w) |
                                                      (!cpu_vpa & !cpu_vda & hs_selected_w)
                                                      ) ;
+
   assign dummy_access_w =  himem_w | !ls_selected_w ;
 
   // ROM remapping
@@ -258,8 +247,9 @@ module level1b_mk2_m (
 
   always @ ( * ) begin
     if ( map_data_q[`SHADOW_MEM_IDX] )
-      // Always remap memory 0-12K in shadow mode, but only remap 12K-32K when not being accessed by MOS VDU routines
-      remapped_ram_access_r  = (!cpu_data[7] & !cpu_adr[15] & ( !(cpu_adr[14]|cpu_adr[13])  | !mos_vdu_sync_q ));
+      // Always remap memory 0-12K in shadow mode, but only remap rest of RAM when not being accessed by MOS VDU routines
+      // remap lomem = 0x0000 - 0x2FFF always              = !a15 & !a14 & !(a13 & a12)
+      remapped_ram_access_r  = !cpu_data[7] & !cpu_adr[15] & ( (!cpu_adr[14] & !(cpu_adr[13] & cpu_adr[12])) | !mos_vdu_sync_q);
     else
       // Remap all of memory
       remapped_ram_access_r = (!cpu_data[7] & !cpu_adr[15]);
@@ -303,7 +293,6 @@ module level1b_mk2_m (
 	    cpu_data_r[`MAP_HSCLK_EN_IDX]      = map_data_q[`MAP_HSCLK_EN_IDX] ;
 	    cpu_data_r[`SHADOW_MEM_IDX]        = map_data_q[`SHADOW_MEM_IDX];
 	    cpu_data_r[`MAP_ROM_IDX]           = map_data_q[`MAP_ROM_IDX];
-	    cpu_data_r[`MAP_RAM_IDX]           = map_data_q[`MAP_RAM_IDX];
 	    cpu_data_r[`CLK_CPUCLK_DIV_IDX_HI] = map_data_q[`CLK_CPUCLK_DIV_IDX_HI];
 	    cpu_data_r[`CLK_CPUCLK_DIV_IDX_LO] = map_data_q[`CLK_CPUCLK_DIV_IDX_LO];
           end
@@ -334,7 +323,6 @@ module level1b_mk2_m (
 	  map_data_q[`MAP_HSCLK_EN_IDX]       <= cpu_data[`MAP_HSCLK_EN_IDX] ;
 	  map_data_q[`SHADOW_MEM_IDX]         <= cpu_data[`SHADOW_MEM_IDX];
 	  map_data_q[`MAP_ROM_IDX]            <= cpu_data[`MAP_ROM_IDX];
-	  map_data_q[`MAP_RAM_IDX]            <= cpu_data[`MAP_RAM_IDX];
 	  map_data_q[`CLK_CPUCLK_DIV_IDX_HI]  <= cpu_data[`CLK_CPUCLK_DIV_IDX_HI];
 	  map_data_q[`CLK_CPUCLK_DIV_IDX_LO]  <= cpu_data[`CLK_CPUCLK_DIV_IDX_LO];
         end
@@ -364,11 +352,24 @@ module level1b_mk2_m (
       io_access_pipe_q <= ( io_access_pipe_q >> 1 )| {`IO_ACCESS_DELAY_SZ{ io_access_pipe_d }};
   end
 
-  // Instruction was fetched from VDU routines in MOS if in the range EEC000 - EEDFFF (if remapped to himem)
-  // or in range 00C000 - 00DFFF if ROM remapping disabled.
+  // Instruction was fetched from VDU routines in MOS if
+  // - in the range EEC000 - EEDFFF (if remapped to himem)
+  // - OR in range 00C000 - 00DFFF if ROM remapping disabled.
+  //
+  // Address bits
+  // 23 22 21 20 19 18 17 16
+  // 0  x  x  x  x  x  x  x   BBC Motherboard resources
+  // 1  0  x  x  x  x  x  x   High IO Space
+  // 1  1  0  x  x  0  0  0   5 banks of Native RAM for 816 (or more!)
+  // 1  1  1  0  x  1  0  0   ROMS 4,5,6,7 remapping
+  // 1  1  1  0  x  1  0  1   ROMS 12,13,14,15 remapping
+  // 1  1  1  0  x  1  1  0   MOS + Shadow RAM/VRAM caching + low RAM (below 12K)
+  // 1  1  1  1  1  1  1  1   816 vectors (not implemented)
+  //
+  // Decode VDU routines then as   xxx0_1110
   always @ ( negedge cpu_phi2_w )
-    mos_vdu_sync_q <= (cpu_vpa & cpu_vda) ? ( (cpu_hiaddr_lat_q==8'h0 || cpu_hiaddr_lat_q==8'hEE) & (cpu_adr[15:13]==3'b110)) : mos_vdu_sync_q;
-
+    if ( cpu_vpa & cpu_vda)
+      mos_vdu_sync_q <=   (cpu_hiaddr_lat_q[4:0]==5'h0E) & (cpu_adr[15:13]==3'b110);
 
   // Latches for the high address bits open during PHI1
   always @ ( * )
