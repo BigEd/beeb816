@@ -13,10 +13,6 @@
 // faster clocks so ideally this should be linked with the divider setting. Over 16MHz needs
 // 5 cycles but 13.8MHz seems ok with 4.
 `define IO_ACCESS_DELAY_SZ     5
-
-// Boot with LOMEM remapped already to on-board RAM/VRAM cached
-`define REMAP_LOMEM_ALWAYS     1
-
 // Define this to get a clean deassertion/reassertion of RAM CEB but this limits some
 // setup time from CEB low to data valid etc. Not an issue in a board with a faster
 // SMD RAM so expect to set this in the final design, but omitting it can help with
@@ -171,7 +167,7 @@ module level1b_mk2_m (
 
 `ifdef ASSERT_RAMCEB_IN_PHI2
   // All addresses starting 0b11 go to the on-board RAM and 0b10 to IO space, so check just bit 6
-  assign ram_ceb = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa) & cpu_phi2_w );
+  assign ram_ceb = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa) & cpu_phi2_w  & ( cpu_rnw | !(remapped_mos_access_r|remapped_romCF_access_r)) );
   // PCB Hack 1 - gpio[0] = ram_oeb
   assign gpio[0] = ram_ceb;
   assign ram_web = cpu_rnw ;
@@ -231,8 +227,7 @@ module level1b_mk2_m (
     remapped_mos_access_r = 0;
     remapped_rom47_access_r = 0;
     remapped_romCF_access_r = 0;
-    // Remap only reads as a form of write protection
-    if (!cpu_data[7] & map_data_q[`MAP_ROM_IDX] & cpu_adr[15] & (cpu_vpa|cpu_vda) & cpu_rnw) begin
+    if (!cpu_data[7] & map_data_q[`MAP_ROM_IDX] & cpu_adr[15] & (cpu_vpa|cpu_vda)) begin
       // Remap MOS from C000-FBFF only (exclude IO space and vectors)
       if ( cpu_adr[14] & !(&(cpu_adr[13:10])))
         remapped_mos_access_r = 1;
@@ -345,12 +340,8 @@ module level1b_mk2_m (
 
   // Short pipeline to delay switching back to hs clock after an IO access to ensure any instruction
   // timed delays are respected.
-  always @ ( negedge cpu_phi2_w or negedge resetb ) begin
-    if ( !resetb )
-      io_access_pipe_q <= `IO_ACCESS_DELAY_SZ'b0;
-    else
+  always @ ( negedge cpu_phi2_w )
       io_access_pipe_q <= ( io_access_pipe_q >> 1 )| {`IO_ACCESS_DELAY_SZ{ io_access_pipe_d }};
-  end
 
   // Instruction was fetched from VDU routines in MOS if
   // - in the range EEC000 - EEDFFF (if remapped to himem)
