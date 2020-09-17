@@ -167,16 +167,16 @@ module level1b_mk2_m (
 
 `ifdef ASSERT_RAMCEB_IN_PHI2
   // All addresses starting 0b11 go to the on-board RAM and 0b10 to IO space, so check just bit 6
-  assign ram_ceb = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa) & cpu_phi2_w  & ( cpu_rnw | !(remapped_mos_access_r|remapped_romCF_access_r)) );
+  assign ram_ceb = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa) & cpu_phi2_w  & (cpu_rnw | !(remapped_mos_access_r|remapped_romCF_access_r)));
   // PCB Hack 1 - gpio[0] = ram_oeb
   assign gpio[0] = ram_ceb;
   assign ram_web = cpu_rnw ;
 `else
   // All addresses starting 0b11 go to the on-board RAM and 0b10 to IO space, so check just bit 6
-  assign ram_ceb = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa));
+  assign ram_ceb = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa) & (cpu_rnw | !(remapped_mos_access_r|remapped_romCF_access_r)));
   // PCB Hack 1 - gpio[0] = ram_oeb
   assign gpio[0] = cpu_phi1_w ;
-  assign ram_web = cpu_rnw | cpu_phi1_w; // Write protect remapped MOS + ROMS C-F
+  assign ram_web = cpu_rnw | cpu_phi1_w; 
 `endif
 
   // All addresses starting with 0b10 go to internal IO registers which update on the
