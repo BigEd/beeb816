@@ -92,7 +92,8 @@ module level1b_mk2_m (
   reg                                  mos_vdu_sync_q;
   reg                                  himem_vram_wr_lat_q;
   reg                                  himem_vram_wr_d;
-
+  reg                                  rom_wr_protect_lat_q;
+  
   // This is the internal register controlling which features like high speed clocks etc are enabled
   reg [ `CPLD_REG_SEL_SZ-1:0]          cpld_reg_sel_q;
   // This will be a copy of the BBC ROM page register so we know which ROM is selected
@@ -176,13 +177,13 @@ else
 
 `ifdef ASSERT_RAMCEB_IN_PHI2
   // All addresses starting 0b11 go to the on-board RAM and 0b10 to IO space, so check just bit 6
-  assign ram_ceb = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa) & cpu_phi2_w  & (cpu_rnw | !(remapped_mos_access_r|remapped_romCF_access_r)));
+  assign ram_ceb = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa) & cpu_phi2_w  & (cpu_rnw | !rom_wr_protect_lat_q));
   // PCB Hack 1 - gpio[0] = ram_oeb
   assign gpio[0] = ram_ceb;
   assign ram_web = cpu_rnw ;
 `else
   // All addresses starting 0b11 go to the on-board RAM and 0b10 to IO space, so check just bit 6
-  assign ram_ceb = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa) & (cpu_rnw | !(remapped_mos_access_r|remapped_romCF_access_r)));
+  assign ram_ceb = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa) & (cpu_rnw | !rom_wr_protect_lat_q));
   // PCB Hack 1 - gpio[0] = ram_oeb
   assign gpio[0] = cpu_phi1_w ;
   assign ram_web = cpu_rnw | cpu_phi1_w;
@@ -377,6 +378,7 @@ else
         cpu_a15_lat_q <= cpu_a15_lat_d;
         cpu_a14_lat_q <= cpu_a14_lat_d;
         himem_vram_wr_lat_q <= himem_vram_wr_d;
+        rom_wr_protect_lat_q <= remapped_mos_access_r|remapped_romCF_access_r ;        
       end
 
 endmodule // level1b_m
