@@ -10,7 +10,7 @@
 //`ifdef REMAP_NATIVE_INTERRUPTS_D
 
 // Define this to double delay on the clock output
-// `define DOUBLE_CLOCK_DELAY 1
+`define DOUBLE_CLOCK_DELAY 1
 
 // Depth of pipeline to delay switches to HS clock after an IO access. Need more cycles for
 // faster clocks so ideally this should be linked with the divider setting. Over 16MHz needs
