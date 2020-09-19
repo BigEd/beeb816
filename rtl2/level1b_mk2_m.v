@@ -27,6 +27,15 @@
 // Define these to implement feature not used on the BBC model B: SYNC
 // `define IMPL_GENERIC_6502_PINS
 
+// Use data latches on CPU2BBC and/or BBC2CPU data transfers to improve hold times
+//`define USE_DATA_LATCHES_BBC2CPU 1
+//`define USE_DATA_LATCHES_CPU2BBC 1
+// Put latches on adr bits 13..8 (already have explicit latches on 14 and 15)
+`define USE_ADR_LATCHES_CPU2BBC 1
+
+// May need to define this for faster CPLDs
+`define ADD_CLOCK_SKEW   1
+
 `define MAP_CC_DATA_SZ         8
 `define SHADOW_MEM_IDX         7
 `define MAP_ROM_IDX            4
@@ -93,7 +102,16 @@ module level1b_mk2_m (
   reg                                  himem_vram_wr_lat_q;
   reg                                  himem_vram_wr_d;
   reg                                  rom_wr_protect_lat_q;
-  
+`ifdef USE_DATA_LATCHES_BBC2CPU
+  reg [7:0]                            bbc_data_lat_q;
+`endif
+`ifdef USE_DATA_LATCHES_CPU2BBC
+  reg [7:0]                            cpu_data_lat_q;
+`endif
+// Only need to define latches for bits [13:8], since a15, a14 are handled separately and 7:0 are external to CPLD  
+`ifdef USE_ADR_LATCHES_CPU2BBC
+  reg [5:0]                            cpu_adr_lat_q;
+`endif                            
   // This is the internal register controlling which features like high speed clocks etc are enabled
   reg [ `CPLD_REG_SEL_SZ-1:0]          cpld_reg_sel_q;
   // This will be a copy of the BBC ROM page register so we know which ROM is selected
@@ -125,6 +143,8 @@ module level1b_mk2_m (
   wire                                 himem_w;
   wire                                 hisync_w;
 
+
+`ifdef ADD_CLOCK_SKEW  
   // Force keep intermediate nets to preserve strict delay chain for clocks
   (* KEEP="TRUE" *) wire ckdel_1_b;
   (* KEEP="TRUE" *) wire ckdel_2;
@@ -146,6 +166,23 @@ module level1b_mk2_m (
                     );
   assign bbc_phi1 = ckdel_3_b;
   assign bbc_phi2 = ckdel_4;
+`else
+  // Force keep intermediate nets to preserve strict delay chain for clocks
+  (* KEEP="TRUE" *) wire ckdel_1_b;
+  INV    ckdel1   ( .I(bbc_phi0), .O(ckdel_1_b));
+  clkctrl_phi2 U_0 (
+                    .hsclk_in(hsclk),
+                    .lsclk_in(ckdel_1_b),
+                    .rst_b(resetb),
+                    .hsclk_sel(sel_hs_w),
+                    .cpuclk_div_sel(map_data_q[`CLK_CPUCLK_DIV_IDX_HI:`CLK_CPUCLK_DIV_IDX_LO]),
+                    .hsclk_selected(hs_selected_w),
+                    .lsclk_selected(ls_selected_w),
+                    .clkout(cpu_phi1_w)
+                    );
+  assign bbc_phi1 = ckdel_1_b;
+  assign bbc_phi2 = !bbc_phi1;
+`endif // !`ifdef ADD_CLOCK_SKEW
 
 
   assign cpu_phi2_w = !cpu_phi1_w ;
@@ -199,9 +236,20 @@ else
 `endif
 
   // Force dummy read access when accessing himem explicitly but not for remapped RAM accesses which can still complete
-  assign bbc_adr = (dummy_access_w) ? 8'h80 : cpu_adr[15:8];  
+`ifdef USE_ADR_LATCHES_CPU2BBC
+  assign bbc_adr = { ( (dummy_access_w) ? 2'b10 : { cpu_a15_lat_q, cpu_a14_lat_q}), cpu_adr_lat_q };  
+`else  
+  assign bbc_adr = (dummy_access_w) ? 8'h80 : cpu_adr[15:8];
+`endif
+
+
+  
   assign bbc_rnw = cpu_rnw | dummy_access_w ;
-  assign bbc_data = ( !bbc_rnw & bbc_phi2 ) ? cpu_data : { 8{1'bz}};
+`ifdef USE_DATA_LATCHES_CPU2BBC
+  assign bbc_data = ( !bbc_rnw & bbc_phi2) ? cpu_data_lat_q : { 8{1'bz}};
+`else
+  assign bbc_data = ( !bbc_rnw & bbc_phi2) ? cpu_data : { 8{1'bz}};
+`endif
   assign cpu_data = cpu_data_r;
 
   always @ ( * ) begin
@@ -305,7 +353,11 @@ else
             cpu_data_r = {8{1'bz}};
         end
         else
+`ifdef USE_DATA_LATCHES_BBC2CPU
+          cpu_data_r = bbc_data_lat_q;
+`else
           cpu_data_r = bbc_data;
+`endif
       end
     else
       cpu_data_r = {8{1'bz}};
@@ -380,5 +432,25 @@ else
         himem_vram_wr_lat_q <= himem_vram_wr_d;
         rom_wr_protect_lat_q <= remapped_mos_access_r|remapped_romCF_access_r ;        
       end
+
+`ifdef USE_DATA_LATCHES_BBC2CPU
+  // Latches for the BBC data open during PHI2 to be stable beyond cycle end
+  always @ ( * )
+    if ( !bbc_phi1 )
+      bbc_data_lat_q <= bbc_data;
+`endif
+
+`ifdef USE_DATA_LATCHES_CPU2BBC
+  always @ ( * )
+    if ( cpu_phi2_w )
+      cpu_data_lat_q <= cpu_data;
+`endif
+
+`ifdef USE_ADR_LATCHES_CPU2BBC
+  always @ ( * )
+    if ( cpu_phi1_w )
+      cpu_adr_lat_q <= cpu_adr[13:8];
+`endif
+  
 
 endmodule // level1b_m
