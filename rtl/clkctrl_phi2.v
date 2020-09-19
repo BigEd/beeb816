@@ -8,12 +8,16 @@
 
 // Number of retiming steps of slow clock for hs clock enable, N must be >= 2
 // at higher speeds esp with -15ns parts
-`define SINGLE_LS_RETIMER 1
+//`define SINGLE_LS_RETIMER 1
 `ifdef SINGLE_LS_RETIMER
   `define LS_PIPE_SZ 1
 `else
   `define LS_PIPE_SZ 2
 `endif
+
+// Define this to implement the divide-by-4 
+//`define IMPL_DIV4
+
 
 module clkctrl_phi2(
                input       hsclk_in,
@@ -26,7 +30,11 @@ module clkctrl_phi2(
                output      clkout
                );
 
-  reg                     hsclk_by2_q, hsclk_by4_q, hsclk_by8_q;
+  reg                      hsclk_by2_q;
+`ifdef IMPL_DIV4
+  reg                      hsclk_by4_q;
+`endif
+  
   reg                     cpuclk_r;
   reg                     hs_enable_q, ls_enable_q;
   reg                     selected_ls_q;
@@ -45,8 +53,13 @@ module clkctrl_phi2(
     case (cpuclk_div_sel)
       2'b00 : cpuclk_r = hsclk_in;
       2'b01 : cpuclk_r = hsclk_by2_q;
+`ifdef IMPL_DIV4      `
       2'b10 : cpuclk_r = hsclk_by4_q;
-      2'b11 : cpuclk_r = hsclk_by8_q;
+      2'b11 : cpuclk_r = hsclk_by4_q;
+`else      
+      2'b10 : cpuclk_r = hsclk_in;
+      2'b11 : cpuclk_r = hsclk_by2_q;
+`endif      
       default: cpuclk_r = 1'bx;
     endcase // case (cpuclk_div_sel)
 
@@ -92,16 +105,12 @@ module clkctrl_phi2(
     else
       hsclk_by2_q <= !hsclk_by2_q;
 
+`ifdef IMPL_DIV4  
   always @ ( posedge hsclk_by2_q  or negedge rst_b )
     if ( !rst_b )
       hsclk_by4_q <= 1'b0;
     else
       hsclk_by4_q <= !hsclk_by4_q;
-
-  always @ ( posedge hsclk_by4_q  or negedge rst_b )
-    if ( !rst_b )
-      hsclk_by8_q <= 1'b0;
-    else
-      hsclk_by8_q <= !hsclk_by8_q;
+`endif
 
 endmodule

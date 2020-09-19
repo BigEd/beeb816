@@ -9,6 +9,9 @@
 // Interrupts are not handled in '816 mode so leave this undefined for now
 //`ifdef REMAP_NATIVE_INTERRUPTS_D
 
+// Define this to double delay on the clock output
+// `define DOUBLE_CLOCK_DELAY 1
+
 // Depth of pipeline to delay switches to HS clock after an IO access. Need more cycles for
 // faster clocks so ideally this should be linked with the divider setting. Over 16MHz needs
 // 5 cycles but 13.8MHz seems ok with 4.
@@ -25,6 +28,9 @@
 // Define this for BBC B+/Master Shadow RAM control
 //`define MASTER_SHADOW_CTRL 1
 
+// Define these to implement feature not used on the BBC model B: SYNC
+// `define IMPL_GENERIC_6502_PINS
+
 `define MAP_CC_DATA_SZ         8
 `define SHADOW_MEM_IDX         7
 `define MAP_ROM_IDX            4
@@ -40,9 +46,9 @@
 `define CPLD_REG_SEL_BBC_SHADOW_IDX 2
 `else
 `define CPLD_REG_SEL_SZ        2
+`endif
 `define CPLD_REG_SEL_MAP_CC_IDX 1
 `define CPLD_REG_SEL_BBC_PAGEREG_IDX 0
-`endif
 
 
 // Address of ROM selection reg in BBC memory map
@@ -100,6 +106,8 @@ module level1b_mk2_m (
   reg                                  remapped_romCF_access_r ;
   reg                                  remapped_mos_access_r ;
   reg                                  remapped_ram_access_r ;
+  reg                                  romCF_selected_q;
+  reg                                  rom47_selected_q;
   reg                                  cpu_a15_lat_d;
   reg                                  cpu_a14_lat_d;
   reg                                  cpu_a15_lat_q;
@@ -120,15 +128,16 @@ module level1b_mk2_m (
   wire                                 himem_w;
   wire                                 hisync_w;
 
+`ifdef DOUBLE_CLOCK_DELAY
   // Force keep intermediate nets to preserve strict delay chain for clocks
-  (* KEEP="TRUE" *) wire ckdel_1_b, ckdel_3_b;
-  (* KEEP="TRUE" *) wire ckdel_2, ckdel_4;
-
+  (* KEEP="TRUE" *) wire ckdel_1_b;
+  (* KEEP="TRUE" *) wire ckdel_2;
+  (* KEEP="TRUE" *) wire ckdel_3_b;
+  (* KEEP="TRUE" *) wire ckdel_4;
   INV    ckdel1   ( .I(bbc_phi0), .O(ckdel_1_b));
-  INV    ckdel2   ( .I(ckdel_1_b),    .O(ckdel_2));
+  INV    ckdel2   ( .I(ckdel_1_b),    .O(ckdel_2));  
   INV    ckdel3   ( .I(ckdel_2),      .O(ckdel_3_b));
   INV    ckdel4   ( .I(ckdel_3_b),    .O(ckdel_4));
-
   clkctrl_phi2 U_0 (
                     .hsclk_in(hsclk),
                     .lsclk_in(ckdel_3_b),
@@ -139,12 +148,34 @@ module level1b_mk2_m (
                     .lsclk_selected(ls_selected_w),
                     .clkout(cpu_phi1_w)
                     );
+  assign bbc_phi1 = ckdel_3_b;
+  assign bbc_phi2 = ckdel_4;
+`else
+  // Force keep intermediate nets to preserve strict delay chain for clocks
+  (* KEEP="TRUE" *) wire ckdel_1_b;
+  INV    ckdel1   ( .I(bbc_phi0), .O(ckdel_1_b));
+  clkctrl_phi2 U_0 (
+                    .hsclk_in(hsclk),
+                    .lsclk_in(ckdel_1_b),
+                    .rst_b(resetb),
+                    .hsclk_sel(sel_hs_w),
+                    .cpuclk_div_sel(map_data_q[`CLK_CPUCLK_DIV_IDX_HI:`CLK_CPUCLK_DIV_IDX_LO]),
+                    .hsclk_selected(hs_selected_w),
+                    .lsclk_selected(ls_selected_w),
+                    .clkout(cpu_phi1_w)
+                    );
+  assign bbc_phi1 = ckdel_1_b;
+  assign bbc_phi2 = !bbc_phi1;  
+`endif // !`ifdef DOUBLE_CLOCK_DELAY
+
 
   assign cpu_phi2_w = !cpu_phi1_w ;
   assign cpu_phi2 =  cpu_phi2_w ;
-  assign bbc_phi1 = ckdel_3_b;
-  assign bbc_phi2 = ckdel_4;
+`ifdef IMPL_GENERIC_6502_PINS
   assign bbc_sync = cpu_vpa & cpu_vda;
+else
+  assign bbc_sync = 1'bz;
+`endif
   assign rdy = 1'bz;
   assign irqb = 1'bz;
   assign nmib = 1'bz;
@@ -176,20 +207,20 @@ module level1b_mk2_m (
   assign ram_ceb = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa) & (cpu_rnw | !(remapped_mos_access_r|remapped_romCF_access_r)));
   // PCB Hack 1 - gpio[0] = ram_oeb
   assign gpio[0] = cpu_phi1_w ;
-  assign ram_web = cpu_rnw | cpu_phi1_w; 
+  assign ram_web = cpu_rnw | cpu_phi1_w;
 `endif
 
   // All addresses starting with 0b10 go to internal IO registers which update on the
   // rising edge of cpu_phi1 - use the cpu_data bus directly for the high address
   // bits since it's stable by the end of phi1
-  assign cpld_reg_sel_d[`CPLD_REG_SEL_MAP_CC_IDX] = cpu_vda && ( cpu_data[7:6]== 2'b10) && ( cpu_adr[1:0] == 2'b11);
+  assign cpld_reg_sel_d[`CPLD_REG_SEL_MAP_CC_IDX] = cpu_vda && ( cpu_data[7:6]== 2'b10);
   assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = cpu_vda && (cpu_data[7]== 1'b0) && ( cpu_adr == `PAGED_ROM_SEL );
 `ifdef MASTER_SHADOW_CTRL
   assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_SHADOW_IDX] = cpu_vda && (cpu_data[7]== 1'b0) && ( cpu_adr == `SHADOW_RAM_SEL );
 `endif
 
   // Force dummy read access when accessing himem explicitly but not for remapped RAM accesses which can still complete
-  assign bbc_adr = ( dummy_access_w ) ? {8'h80} : cpu_adr[15:8] ;
+  assign bbc_adr = (dummy_access_w) ? 8'h80 : cpu_adr[15:8];  
   assign bbc_rnw = cpu_rnw | dummy_access_w ;
   assign bbc_data = ( !bbc_rnw & bbc_phi2 ) ? cpu_data : { 8{1'bz}};
   assign cpu_data = cpu_data_r;
@@ -329,14 +360,12 @@ module level1b_mk2_m (
 `endif
       end // else: !if( !resetb )
 
-
   // Flop all the internal register sel bits on falling edge of phi1
   always @ ( posedge cpu_phi2_w or negedge resetb )
     if ( !resetb )
         cpld_reg_sel_q <= {`CPLD_REG_SEL_SZ{1'b0}};
     else
         cpld_reg_sel_q <= cpld_reg_sel_d ;
-
 
   // Short pipeline to delay switching back to hs clock after an IO access to ensure any instruction
   // timed delays are respected.
