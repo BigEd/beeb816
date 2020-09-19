@@ -8,10 +8,6 @@
 //
 // Interrupts are not handled in '816 mode so leave this undefined for now
 //`ifdef REMAP_NATIVE_INTERRUPTS_D
-
-// Define this to double delay on the clock output
-`define DOUBLE_CLOCK_DELAY 1
-
 // Depth of pipeline to delay switches to HS clock after an IO access. Need more cycles for
 // faster clocks so ideally this should be linked with the divider setting. Over 16MHz needs
 // 5 cycles but 13.8MHz seems ok with 4.
@@ -128,7 +124,6 @@ module level1b_mk2_m (
   wire                                 himem_w;
   wire                                 hisync_w;
 
-`ifdef DOUBLE_CLOCK_DELAY
   // Force keep intermediate nets to preserve strict delay chain for clocks
   (* KEEP="TRUE" *) wire ckdel_1_b;
   (* KEEP="TRUE" *) wire ckdel_2;
@@ -150,23 +145,6 @@ module level1b_mk2_m (
                     );
   assign bbc_phi1 = ckdel_3_b;
   assign bbc_phi2 = ckdel_4;
-`else
-  // Force keep intermediate nets to preserve strict delay chain for clocks
-  (* KEEP="TRUE" *) wire ckdel_1_b;
-  INV    ckdel1   ( .I(bbc_phi0), .O(ckdel_1_b));
-  clkctrl_phi2 U_0 (
-                    .hsclk_in(hsclk),
-                    .lsclk_in(ckdel_1_b),
-                    .rst_b(resetb),
-                    .hsclk_sel(sel_hs_w),
-                    .cpuclk_div_sel(map_data_q[`CLK_CPUCLK_DIV_IDX_HI:`CLK_CPUCLK_DIV_IDX_LO]),
-                    .hsclk_selected(hs_selected_w),
-                    .lsclk_selected(ls_selected_w),
-                    .clkout(cpu_phi1_w)
-                    );
-  assign bbc_phi1 = ckdel_1_b;
-  assign bbc_phi2 = !bbc_phi1;  
-`endif // !`ifdef DOUBLE_CLOCK_DELAY
 
 
   assign cpu_phi2_w = !cpu_phi1_w ;
@@ -272,7 +250,7 @@ else
   end
 
   always @ ( * ) begin
-    if ( map_data_q[`SHADOW_MEM_IDX] )
+    if ( map_data_q[`SHADOW_MEM_IDX])
       // Always remap memory 0-12K in shadow mode, but only remap rest of RAM when not being accessed by MOS VDU routines
       // remap lomem = 0x0000 - 0x2FFF always              = !a15 & !a14 & !(a13 & a12)
       remapped_ram_access_r  = !cpu_data[7] & !cpu_adr[15] & ( (!cpu_adr[14] & !(cpu_adr[13] & cpu_adr[12])) | !mos_vdu_sync_q);
