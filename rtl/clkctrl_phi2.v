@@ -15,9 +15,8 @@
   `define LS_PIPE_SZ 2
 `endif
 
-
 // Define this to enable the div4 clock divider function
-//`define ENABLE_DIV4 1
+// `define ENABLE_DIV4 1
 
 module clkctrl_phi2(
                input       hsclk_in,
@@ -45,11 +44,18 @@ module clkctrl_phi2(
   wire                    retimed_ls_enable_w = pipe_retime_ls_enable_q[0];
   wire                    retimed_hs_enable_w = pipe_retime_hs_enable_q[0];
 
-  assign clkout = (cpuclk_r & hs_enable_q ) | (lsclk_in & ls_enable_q);
+`ifndef ENABLE_DIV4
+  // Need to add some delay if not using the divide by 4 option
+  (* KEEP="TRUE" *) wire clkout_pre_w;
+  assign clkout_pre_w = (cpuclk_r & hs_enable_q ) | (lsclk_in & ls_enable_q);
+  BUF  ckbuf ( .I(clkout_pre_w), .O(clkout));  
+`else
+  assign clkout = (cpuclk_r & hs_enable_q ) | (lsclk_in & ls_enable_q);  
+`endif
+  
   assign lsclk_selected = selected_ls_q;
   assign hsclk_selected = hs_enable_q;
 
-  
   always @ ( * )
 `ifdef ENABLE_DIV4    
     case (cpuclk_div_sel)
