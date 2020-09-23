@@ -15,6 +15,10 @@
   `define LS_PIPE_SZ 2
 `endif
 
+
+// Define this to enable the div4 clock divider function
+//`define ENABLE_DIV4 1
+
 module clkctrl_phi2(
                input       hsclk_in,
                input       lsclk_in,
@@ -27,7 +31,9 @@ module clkctrl_phi2(
                );
 
   reg                      hsclk_by2_q;
+`ifdef ENABLE_DIV4  
   reg                      hsclk_by4_q;
+`endif
   
   reg                     cpuclk_r;
   reg                     hs_enable_q, ls_enable_q;
@@ -43,7 +49,9 @@ module clkctrl_phi2(
   assign lsclk_selected = selected_ls_q;
   assign hsclk_selected = hs_enable_q;
 
+  
   always @ ( * )
+`ifdef ENABLE_DIV4    
     case (cpuclk_div_sel)
       2'b00 : cpuclk_r = hsclk_in;
       2'b01 : cpuclk_r = hsclk_by2_q;
@@ -51,6 +59,9 @@ module clkctrl_phi2(
       2'b11 : cpuclk_r = hsclk_by4_q;
       default: cpuclk_r = 1'bx;
     endcase // case (cpuclk_div_sel)
+`else
+  cpuclk_r = (cpuclk_div_sel[0]) ? hsclk_by2_q : hsclk_in;  
+`endif      
 
   // Selected LS signal must change on posedge of clock
   always @ (posedge lsclk_in or negedge rst_b)
@@ -94,10 +105,11 @@ module clkctrl_phi2(
     else
       hsclk_by2_q <= !hsclk_by2_q;
 
+`ifdef ENABLE_DIV4  
   always @ ( posedge hsclk_by2_q  or negedge rst_b )
     if ( !rst_b )
       hsclk_by4_q <= 1'b0;
     else
       hsclk_by4_q <= !hsclk_by4_q;
-
+`endif
 endmodule
