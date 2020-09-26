@@ -37,24 +37,21 @@
 // Define this to use fast reads/slow writes to Shadow as with the VRAM to simplify decoding
 //`define CACHED_SHADOW_RAM 1
 //
-// Define this for 10ns and 15ns CPLDs but 7ns ones don't work with additional delay here in shadow mode !
-// `define ADD_CLOCK_SKEW   1
-// `define ADD_MORE_CLOCK_SKEW   1
+// Define this to add delay on the BBC and CPU clocks
+// `define ADD_CLOCK_DELAY   1
+// `define ADD_MORE_CLOCK_DELAY   1
 
-`ifdef XC95108_15
+
+`ifdef XC95108_7
+  // Trial settings for the XC95108-7 different from standard run
+  // Use data latches on BBC2CPU data transfers
+  `define ADD_CLOCK_DELAY   1
+  `define ADD_MORE_CLOCK_DELAY   1
+  `define USE_DATA_LATCHES_BBC2CPU 1
+  // This appears to fix the shadow mode issues with faster CPLD
+  `define CACHED_SHADOW_RAM 1
 `else
-  `ifdef XC95108_7
-    // Trial settings for the XC95108-7 different from standard run
-    // Use data latches on BBC2CPU data transfers
-    `define USE_DATA_LATCHES_BBC2CPU 1
-    // This appears to fix the shadow mode issues with faster CPLD
-    `define CACHED_SHADOW_RAM 1
-  `else
-    // Need to define this for faster CPLDs (10ns, 7ns) but slow 15ns ones are ok without it
-    `define ADD_CLOCK_SKEW   1
-    // Use data latches on BBC2CPU data transfers to add hold margin
-    `define USE_DATA_LATCHES_BBC2CPU 1
-  `endif
+  `define ADD_CLOCK_DELAY   1
 `endif
 
 `define MAP_CC_DATA_SZ         8
@@ -164,7 +161,7 @@ module level1b_mk2_m (
   wire                                 himem_w;
   wire                                 hisync_w;
 
-`ifdef ADD_CLOCK_SKEW  
+`ifdef ADD_CLOCK_DELAY  
   // Force keep intermediate nets to preserve strict delay chain for clocks
   (* KEEP="TRUE" *) wire ckdel_1_b;
   (* KEEP="TRUE" *) wire ckdel_2;
@@ -174,7 +171,7 @@ module level1b_mk2_m (
   INV    ckdel2   ( .I(ckdel_1_b),    .O(ckdel_2));  
   INV    ckdel3   ( .I(ckdel_2),      .O(ckdel_3_b));
   INV    ckdel4   ( .I(ckdel_3_b),    .O(ckdel_4));
-`ifdef ADD_MORE_CLOCK_SKEW  
+`ifdef ADD_MORE_CLOCK_DELAY  
   (* KEEP="TRUE" *) wire ckdel_5_b;
   (* KEEP="TRUE" *) wire ckdel_6;
   INV    ckdel5   ( .I(ckdel_4),      .O(ckdel_5_b));
@@ -182,7 +179,7 @@ module level1b_mk2_m (
 `endif  
   clkctrl_phi2 U_0 (
                     .hsclk_in(hsclk),
-`ifdef ADD_MORE_CLOCK_SKEW
+`ifdef ADD_MORE_CLOCK_DELAY
                     .lsclk_in(ckdel_5_b),                    
 `else                    
                     .lsclk_in(ckdel_3_b),
@@ -194,7 +191,7 @@ module level1b_mk2_m (
                     .lsclk_selected(ls_selected_w),
                     .clkout(cpu_phi1_w)
                     );
-`ifdef ADD_MODE_CLOCK_SKEW
+`ifdef ADD_MORE_CLOCK_DELAY
   assign bbc_phi1 = ckdel_5_b;
   assign bbc_phi2 = ckdel_6;  
 `else  
@@ -217,8 +214,7 @@ module level1b_mk2_m (
                     );
   assign bbc_phi1 = ckdel_1_b;
   assign bbc_phi2 = !bbc_phi1;
-`endif // !`ifdef ADD_CLOCK_SKEW
-
+`endif 
 
   assign cpu_phi2_w = !cpu_phi1_w ;
   assign cpu_phi2 =  cpu_phi2_w ;

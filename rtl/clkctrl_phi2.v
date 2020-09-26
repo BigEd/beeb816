@@ -16,7 +16,7 @@
 `endif
 
 // Define this to enable the div4 clock divider function
-// `define ENABLE_DIV4 1
+`define ENABLE_DIV4 1
 
 module clkctrl_phi2(
                input       hsclk_in,
@@ -40,19 +40,11 @@ module clkctrl_phi2(
   reg [`HS_PIPE_SZ-1:0]   pipe_retime_ls_enable_q;
   reg [`LS_PIPE_SZ-1:0]   pipe_retime_hs_enable_q;
   
-
+  wire                    clkout_pre1_w;  
   wire                    retimed_ls_enable_w = pipe_retime_ls_enable_q[0];
   wire                    retimed_hs_enable_w = pipe_retime_hs_enable_q[0];
 
-`ifndef ENABLE_DIV4
-  // Need to add some delay if not using the divide by 4 option
-  (* KEEP="TRUE" *) wire clkout_pre_w;
-  assign clkout_pre_w = (cpuclk_r & hs_enable_q ) | (lsclk_in & ls_enable_q);
-  BUF  ckbuf ( .I(clkout_pre_w), .O(clkout));  
-`else
-  assign clkout = (cpuclk_r & hs_enable_q ) | (lsclk_in & ls_enable_q);  
-`endif
-  
+  assign clkout = (cpuclk_r & hs_enable_q) | (lsclk_in & ls_enable_q);    
   assign lsclk_selected = selected_ls_q;
   assign hsclk_selected = hs_enable_q;
 
@@ -66,7 +58,10 @@ module clkctrl_phi2(
       default: cpuclk_r = 1'bx;
     endcase // case (cpuclk_div_sel)
 `else
-  cpuclk_r = (cpuclk_div_sel[0]) ? hsclk_by2_q : hsclk_in;  
+  if (cpuclk_div_sel[0]==1'b1)
+    cpuclk_r = hsclk_by2_q;
+  else
+    cpuclk_r = hsclk_in;  
 `endif      
 
   // Selected LS signal must change on posedge of clock
