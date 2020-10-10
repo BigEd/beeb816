@@ -23,7 +23,7 @@
 //
 // Define this for BBC B+/Master Shadow RAM control
 //`define MASTER_SHADOW_CTRL 1
-
+//
 // Define these to implement feature not used on the BBC model B: SYNC
 // `define IMPL_GENERIC_6502_PINS
 //
@@ -40,7 +40,6 @@
 // Define this to add delay on the BBC and CPU clocks
 // `define ADD_CLOCK_DELAY   1
 // `define ADD_MORE_CLOCK_DELAY   1
-
 
 `ifdef XC95108_7
   // Trial settings for the XC95108-7 different from standard run
@@ -125,10 +124,10 @@ module level1b_mk2_m (
 `ifdef USE_DATA_LATCHES_CPU2BBC
   reg [7:0]                            cpu_data_lat_q;
 `endif
-// Only need to define latches for bits [13:8], since a15, a14 are handled separately and 7:0 are external to CPLD  
+// Only need to define latches for bits [13:8], since a15, a14 are handled separately and 7:0 are external to CPLD
 `ifdef USE_ADR_LATCHES_CPU2BBC
   reg [5:0]                            cpu_adr_lat_q;
-`endif                            
+`endif
   // This is the internal register controlling which features like high speed clocks etc are enabled
   reg [ `CPLD_REG_SEL_SZ-1:0]          cpld_reg_sel_q;
   // This will be a copy of the BBC ROM page register so we know which ROM is selected
@@ -147,7 +146,7 @@ module level1b_mk2_m (
   reg [7:0]                            cpu_hiaddr_lat_d;
   reg [ `IO_ACCESS_DELAY_SZ-1:0]       io_access_pipe_q;
   wire                                 io_access_pipe_d;
-  
+
   wire                                 himem_vram_wr_d;
   wire [ `CPLD_REG_SEL_SZ-1:0]         cpld_reg_sel_d;
   wire                                 rdy_w;
@@ -161,29 +160,29 @@ module level1b_mk2_m (
   wire                                 himem_w;
   wire                                 hisync_w;
 
-`ifdef ADD_CLOCK_DELAY  
+`ifdef ADD_CLOCK_DELAY
   // Force keep intermediate nets to preserve strict delay chain for clocks
   (* KEEP="TRUE" *) wire ckdel_1_b;
   (* KEEP="TRUE" *) wire ckdel_2;
   (* KEEP="TRUE" *) wire ckdel_3_b;
   (* KEEP="TRUE" *) wire ckdel_4;
   INV    ckdel1   ( .I(bbc_phi0), .O(ckdel_1_b));
-  INV    ckdel2   ( .I(ckdel_1_b),    .O(ckdel_2));  
+  INV    ckdel2   ( .I(ckdel_1_b),    .O(ckdel_2));
   INV    ckdel3   ( .I(ckdel_2),      .O(ckdel_3_b));
   INV    ckdel4   ( .I(ckdel_3_b),    .O(ckdel_4));
-`ifdef ADD_MORE_CLOCK_DELAY  
+`ifdef ADD_MORE_CLOCK_DELAY
   (* KEEP="TRUE" *) wire ckdel_5_b;
   (* KEEP="TRUE" *) wire ckdel_6;
   INV    ckdel5   ( .I(ckdel_4),      .O(ckdel_5_b));
   INV    ckdel6   ( .I(ckdel_5_b),    .O(ckdel_6));
-`endif  
+`endif
   clkctrl_phi2 U_0 (
                     .hsclk_in(hsclk),
 `ifdef ADD_MORE_CLOCK_DELAY
-                    .lsclk_in(ckdel_5_b),                    
-`else                    
+                    .lsclk_in(ckdel_5_b),
+`else
                     .lsclk_in(ckdel_3_b),
-`endif                    
+`endif
                     .rst_b(resetb),
                     .hsclk_sel(sel_hs_w),
                     .cpuclk_div_sel(map_data_q[`CLK_CPUCLK_DIV_IDX_HI:`CLK_CPUCLK_DIV_IDX_LO]),
@@ -193,11 +192,11 @@ module level1b_mk2_m (
                     );
 `ifdef ADD_MORE_CLOCK_DELAY
   assign bbc_phi1 = ckdel_5_b;
-  assign bbc_phi2 = ckdel_6;  
-`else  
+  assign bbc_phi2 = ckdel_6;
+`else
   assign bbc_phi1 = ckdel_3_b;
   assign bbc_phi2 = ckdel_4;
-`endif  
+`endif
 `else
   // Force keep intermediate nets to preserve strict delay chain for clocks
   (* KEEP="TRUE" *) wire ckdel_1_b;
@@ -214,7 +213,7 @@ module level1b_mk2_m (
                     );
   assign bbc_phi1 = ckdel_1_b;
   assign bbc_phi2 = !bbc_phi1;
-`endif 
+`endif
 
   assign cpu_phi2_w = !cpu_phi1_w ;
   assign cpu_phi2 =  cpu_phi2_w ;
@@ -268,13 +267,13 @@ else
 
   // Force dummy read access when accessing himem explicitly but not for remapped RAM accesses which can still complete
 `ifdef USE_ADR_LATCHES_CPU2BBC
-  assign bbc_adr = { ( (dummy_access_w) ? 2'b10 : { cpu_a15_lat_q, cpu_a14_lat_q}), cpu_adr_lat_q };  
-`else  
+  assign bbc_adr = { ( (dummy_access_w) ? 2'b10 : { cpu_a15_lat_q, cpu_a14_lat_q}), cpu_adr_lat_q };
+`else
   assign bbc_adr = (dummy_access_w) ? 8'h80 : cpu_adr[15:8];
 `endif
 
 
-  
+
   assign bbc_rnw = cpu_rnw | dummy_access_w ;
 `ifdef USE_DATA_LATCHES_CPU2BBC
   assign bbc_data = ( !bbc_rnw & bbc_phi2) ? cpu_data_lat_q : { 8{1'bz}};
@@ -289,10 +288,10 @@ else
   assign himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | (cpu_adr[13]&cpu_adr[12]))  & !cpu_rnw  ;
 `else
   // In shadow mode video memory is never remapped so don't mark any of RAM for slow down
-  // In non-shadow mode, cache video RAM accesses instead and mark VRAM writes for slow speed (0x3000-0x7FFF)    
+  // In non-shadow mode, cache video RAM accesses instead and mark VRAM writes for slow speed (0x3000-0x7FFF)
   assign himem_vram_wr_d = !map_data_q[`SHADOW_MEM_IDX] & !cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | (cpu_adr[13]&cpu_adr[12]))  & !cpu_rnw  ;
 `endif
-  
+
   // Check for write accesses to some of IO space (FE4x) in case we need to delay switching back to HS clock
   // so that min pulse widths to sound chip/reading IO are respected
   assign io_access_pipe_d = !cpu_hiaddr_lat_q[7] & (cpu_adr[15:4]==12'hFE4) & cpu_vda ;
@@ -396,7 +395,6 @@ else
   // -------------------------------------------------------------
   // All inferred flops and latches below this point
   // -------------------------------------------------------------
-
   // Internal registers update on the rising edge of cpu_phi1
   always @ ( negedge cpu_phi2_w or negedge resetb )
     if ( !resetb )
@@ -461,7 +459,7 @@ else
         cpu_a15_lat_q <= cpu_a15_lat_d;
         cpu_a14_lat_q <= cpu_a14_lat_d;
         himem_vram_wr_lat_q <= himem_vram_wr_d;
-        rom_wr_protect_lat_q <= remapped_mos_access_r|remapped_romCF_access_r ;        
+        rom_wr_protect_lat_q <= remapped_mos_access_r|remapped_romCF_access_r ;
       end
 
 `ifdef USE_DATA_LATCHES_BBC2CPU
@@ -482,6 +480,6 @@ else
     if ( cpu_phi1_w )
       cpu_adr_lat_q <= cpu_adr[13:8];
 `endif
-  
+
 
 endmodule // level1b_m
