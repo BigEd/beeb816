@@ -22,8 +22,8 @@
 // `define ELECTRON 1
 //
 // Define this for BBC B+/Master Shadow RAM control
-//`define MASTER_SHADOW_CTRL 1
-//
+`define MASTER_SHADOW_CTRL 1
+
 // Define these to implement feature not used on the BBC model B: SYNC
 // `define IMPL_GENERIC_6502_PINS
 //
@@ -451,7 +451,7 @@ else
   // Decode VDU routines then as   xxx0_1110
   always @ ( negedge cpu_phi2_w )
     if ( cpu_vpa & cpu_vda)
-      mos_vdu_sync_q <=   (cpu_hiaddr_lat_q[4:0]==5'h0E) & (cpu_adr[15:13]==3'b110);
+      mos_vdu_sync_q <=   ((map_data_q[`MAP_ROM_IDX] && (cpu_hiaddr_lat_q[4:0]==5'h0E))||(!cpu_hiaddr_lat_q[7])) & (cpu_adr[15:13]==3'b110);
 
   // Latches for the high address bits open during PHI1
   always @ ( * )
