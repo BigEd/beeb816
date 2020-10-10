@@ -22,7 +22,7 @@
 // `define ELECTRON 1
 //
 // Define this for BBC B+/Master Shadow RAM control
-`define MASTER_SHADOW_CTRL 1
+//`define MASTER_SHADOW_CTRL 1
 
 // Define these to implement feature not used on the BBC model B: SYNC
 // `define IMPL_GENERIC_6502_PINS
