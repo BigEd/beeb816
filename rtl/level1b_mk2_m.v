@@ -16,7 +16,7 @@
 // setup time from CEB low to data valid etc. Not an issue in a board with a faster
 // SMD RAM so expect to set this in the final design, but omitting it can help with
 // speed in the proto
-//`define ASSERT_RAMCEB_IN_PHI2  1
+`define ASSERT_RAMCEB_IN_PHI2  1
 //
 // Define this for the Acorn Electron instead of BBC Micro
 // `define ELECTRON 1
@@ -247,7 +247,7 @@ else
   // All addresses starting 0b11 go to the on-board RAM and 0b10 to IO space, so check just bit 6
   assign ram_ceb = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa) & cpu_phi2_w) ;
   // PCB Hack 1 - gpio[0] = ram_oeb
-  assign gpio[0] = ram_ceb;
+  assign gpio[0] = cpu_phi1_w;
   assign ram_web = cpu_rnw | rom_wr_protect_lat_q ;
 `else
   // All addresses starting 0b11 go to the on-board RAM and 0b10 to IO space, so check just bit 6
