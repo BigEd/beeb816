@@ -16,13 +16,13 @@
 // setup time from CEB low to data valid etc. Not an issue in a board with a faster
 // SMD RAM so expect to set this in the final design, but omitting it can help with
 // speed in the proto
-`define ASSERT_RAMCEB_IN_PHI2  1
+// `define ASSERT_RAMCEB_IN_PHI2  1
 //
 // Define this for the Acorn Electron instead of BBC Micro
 // `define ELECTRON 1
 //
 // Define this for BBC B+/Master Shadow RAM control
-//`define MASTER_SHADOW_CTRL 1
+// `define MASTER_SHADOW_CTRL 1
 //
 // Define these to implement feature not used on the BBC model B: SYNC
 // `define IMPL_GENERIC_6502_PINS
@@ -219,7 +219,7 @@ module level1b_mk2_m (
   assign cpu_phi2 =  cpu_phi2_w ;
 `ifdef IMPL_GENERIC_6502_PINS
   assign bbc_sync = cpu_vpa & cpu_vda;
-else
+`else
   assign bbc_sync = 1'bz;
 `endif
   assign rdy = 1'bz;
@@ -259,10 +259,10 @@ else
   // All addresses starting with 0b10 go to internal IO registers which update on the
   // rising edge of cpu_phi1 - use the cpu_data bus directly for the high address
   // bits since it's stable by the end of phi1
-  assign cpld_reg_sel_d[`CPLD_REG_SEL_MAP_CC_IDX] = cpu_vda && ( cpu_data[7:6]== 2'b10);
-  assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = cpu_vda && (cpu_data[7]== 1'b0) && ( cpu_adr == `PAGED_ROM_SEL );
+  assign cpld_reg_sel_d[`CPLD_REG_SEL_MAP_CC_IDX] =  ( cpu_data[7:6]== 2'b10);
+  assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = (cpu_data[7]== 1'b0) && ( cpu_adr == `PAGED_ROM_SEL );
 `ifdef MASTER_SHADOW_CTRL
-  assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_SHADOW_IDX] = cpu_vda && (cpu_data[7]== 1'b0) && ( cpu_adr == `SHADOW_RAM_SEL );
+  assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_SHADOW_IDX] = (cpu_data[7]== 1'b0) && ( cpu_adr == `SHADOW_RAM_SEL );
 `endif
 
   // Force dummy read access when accessing himem explicitly but not for remapped RAM accesses which can still complete
@@ -425,7 +425,7 @@ else
     if ( !resetb )
         cpld_reg_sel_q <= {`CPLD_REG_SEL_SZ{1'b0}};
     else
-        cpld_reg_sel_q <= cpld_reg_sel_d ;
+        cpld_reg_sel_q <= (cpu_vda) ? cpld_reg_sel_d : {`CPLD_REG_SEL_SZ{1'b0}};
 
   // Short pipeline to delay switching back to hs clock after an IO access to ensure any instruction
   // timed delays are respected.
