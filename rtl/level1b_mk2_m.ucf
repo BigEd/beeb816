@@ -6,12 +6,12 @@ TIMESPEC TS_BBC_PHI0 = PERIOD "BBC_PHI0" 200 ns HIGH 50%;
 #NET "*" OFFSET = OUT 45 ns AFTER "bbc_phi2" ;
 #NET "cpu_phi2" OFFSET = OUT 23 ns AFTER "hsclk" ;
 
-PIN "bbc_adr[15]" LOC = P1;
-PIN "bbc_data[3]" LOC = P2;
-PIN "bbc_data[2]" LOC = P3;
-PIN "bbc_data[1]" LOC = P4;
-PIN "bbc_data[0]" LOC = P5;
-PIN "bbc_sync"  LOC = PIN6;
+PIN "bbc_adr[15]" LOC = P1 ;
+PIN "bbc_data[3]" LOC = P2 ;
+PIN "bbc_data[2]" LOC = P3 ;
+PIN "bbc_data[1]" LOC = P4 ;
+PIN "bbc_data[0]" LOC = P5 ;
+PIN "bbc_sync"  LOC = PIN6 ;
 PIN "bbc_rnw" LOC = PIN7;
 PIN "hsclk" LOC = P9; # GCK1
 PIN "bbc_phi0" LOC = PIN10; # GCK2
@@ -75,6 +75,77 @@ PIN "bbc_data[4]" LOC = P81;
 PIN "bbc_adr[12]" LOC = P82;
 PIN "bbc_adr[10]" LOC = P83;
 PIN "bbc_adr[13]" LOC = P84;
+
+
+
+NET "bbc_adr[15]" SLOW ;
+NET "bbc_data[3]" SLOW ;
+NET "bbc_data[2]" SLOW ;
+NET "bbc_data[1]" SLOW ;
+NET "bbc_data[0]" SLOW ;
+NET "bbc_sync"  SLOW ;
+NET "bbc_rnw" SLOW ;
+NET "hsclk" FAST; # GCK1
+NET "bbc_phi0" FAST ; # GCK2
+NET "bbc_phi1" FAST ;
+NET "bbc_phi2" SLOW;
+NET "rdy" SLOW;
+#NET "gpio[5]" SLOW;
+#NET "gpio[4]" SLOW;
+#NET "gpio[3]" SLOW;
+NET "gpio[2]" SLOW;
+NET "gpio[1]" SLOW;
+NET "gpio[0]" SLOW;  
+NET "ram_adr18" SLOW;
+NET "ram_adr17" SLOW;
+NET "ram_adr16" SLOW;
+NET "ram_web" SLOW ; 
+NET "nmib" SLOW;
+NET "irqb" SLOW;
+NET "cpu_vda" SLOW  ;
+NET "cpu_vpb" SLOW  ;
+NET "cpu_phi2" FAST  ;
+NET "cpu_vpa" SLOW  ;
+NET "cpu_e" SLOW ;
+NET "cpu_rnw" SLOW  ;
+NET "cpu_data[7]" SLOW  ;
+NET "cpu_data[0]" SLOW  ;
+NET "cpu_data[1]" SLOW  ;
+NET "cpu_data[6]" SLOW  ;
+NET "cpu_data[2]" SLOW;
+NET "ram_ceb" SLOW;
+NET "cpu_data[3]" SLOW;
+NET "cpu_data[4]" SLOW;
+NET "cpu_data[5]" SLOW;
+NET "cpu_adr[15]" SLOW;
+NET "cpu_adr[14]" SLOW;
+NET "cpu_adr[13]" SLOW;
+NET "cpu_adr[12]" SLOW;
+NET "cpu_adr[11]" SLOW;
+NET "cpu_adr[10]" SLOW;
+NET "cpu_adr[9]" SLOW;
+NET "cpu_adr[8]" SLOW;
+NET "cpu_adr[7]" SLOW;
+NET "cpu_adr[6]" SLOW;
+NET "cpu_adr[5]" SLOW;
+NET "cpu_adr[4]" SLOW;
+NET "cpu_adr[3]" SLOW;
+NET "cpu_adr[2]" SLOW;
+NET "cpu_adr[1]" SLOW;
+NET "cpu_adr[0]" SLOW;
+NET "bbc_adr[8]" SLOW;
+NET "lat_en" SLOW;
+NET "bbc_adr[9]" SLOW;
+NET "resetb" SLOW;    # GSR
+NET "bbc_data[7]" SLOW;
+NET "bbc_adr[11]" SLOW;
+NET "bbc_data[6]" SLOW;
+NET "bbc_data[5]" SLOW;
+NET "bbc_adr[14]" SLOW;
+NET "bbc_data[4]" SLOW;
+NET "bbc_adr[12]" SLOW;
+NET "bbc_adr[10]" SLOW;
+NET "bbc_adr[13]" SLOW;
 
 
 
