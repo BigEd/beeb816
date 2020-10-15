@@ -383,10 +383,11 @@ def cpldfit( ):
     command_list.append("-ofmt vhdl \\")
     command_list.append("-optimize %s \\" % optimize)
     command_list.append("-loc on \\")
-    command_list.append("-slew fast \\")
+    command_list.append("-slew slow \\")
+    command_list.append("-exhaust \\")
     command_list.append("-init low \\")
     command_list.append("-inputs 20 \\")
-    command_list.append("-pterms 15 \\")
+    command_list.append("-pterms 20 \\")
     # Additional options for xc9500
     if g_target.startswith("xc95") :
         command_list.append("-power std -localfbk -pinfbk \\")
