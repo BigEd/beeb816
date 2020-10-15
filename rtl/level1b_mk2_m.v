@@ -24,9 +24,6 @@
 // Define this for BBC B+/Master Shadow RAM control
 // `define MASTER_SHADOW_CTRL 1
 //
-// Define these to implement feature not used on the BBC model B: SYNC
-// `define IMPL_GENERIC_6502_PINS
-//
 // Use data latches on CPU2BBC and/or BBC2CPU data transfers to improve hold times
 //`define USE_DATA_LATCHES_BBC2CPU 1
 //`define USE_DATA_LATCHES_CPU2BBC 1
@@ -41,6 +38,12 @@
 // `define ADD_CLOCK_DELAY   1
 // `define ADD_MORE_CLOCK_DELAY   1
 
+`define TRIAL_RUN 1
+`ifdef TRIAL_RUN
+// Trial settings to target BBC model B and Master and Electron with 10ns CPLD
+  `define USE_DATA_LATCHES_BBC2CPU 1
+`else
+// Previous settings for different CPLDs for BBC model B only
 `ifdef XC95108_7
   // Trial settings for the XC95108-7 different from standard run
   // Use data latches on BBC2CPU data transfers
@@ -52,6 +55,7 @@
 `else
   `define ADD_CLOCK_DELAY   1
 `endif
+`endif // !`ifdef TRIAL_RUN
 
 `define MAP_CC_DATA_SZ         8
 `define SHADOW_MEM_IDX         7
@@ -217,11 +221,7 @@ module level1b_mk2_m (
 
   assign cpu_phi2_w = !cpu_phi1_w ;
   assign cpu_phi2 =  cpu_phi2_w ;
-`ifdef IMPL_GENERIC_6502_PINS
   assign bbc_sync = cpu_vpa & cpu_vda;
-`else
-  assign bbc_sync = 1'bz;
-`endif
   assign rdy = 1'bz;
   assign irqb = 1'bz;
   assign nmib = 1'bz;
