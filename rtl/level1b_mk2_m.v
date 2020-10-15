@@ -204,7 +204,9 @@ module level1b_mk2_m (
 `else
   // Force keep intermediate nets to preserve strict delay chain for clocks
   (* KEEP="TRUE" *) wire ckdel_1_b;
+  (* KEEP="TRUE" *) wire ckdel_2;  
   INV    ckdel1   ( .I(bbc_phi0), .O(ckdel_1_b));
+  INV    ckdel2   ( .I(ckdel_1_b),    .O(ckdel_2));
   clkctrl_phi2 U_0 (
                     .hsclk_in(hsclk),
                     .lsclk_in(ckdel_1_b),
@@ -216,7 +218,7 @@ module level1b_mk2_m (
                     .clkout(cpu_phi1_w)
                     );
   assign bbc_phi1 = ckdel_1_b;
-  assign bbc_phi2 = !bbc_phi1;
+  assign bbc_phi2 = ckdel_2;
 `endif
 
   assign cpu_phi2_w = !cpu_phi1_w ;
