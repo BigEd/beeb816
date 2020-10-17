@@ -16,13 +16,13 @@
 // setup time from CEB low to data valid etc. Not an issue in a board with a faster
 // SMD RAM so expect to set this in the final design, but omitting it can help with
 // speed in the proto
-// `define ASSERT_RAMCEB_IN_PHI2  1
+//`define ASSERT_RAMCEB_IN_PHI2  1
 //
 // Define this for the Acorn Electron instead of BBC Micro
 // `define ELECTRON 1
 //
 // Define this for BBC B+/Master Shadow RAM control
-// `define MASTER_SHADOW_CTRL 1
+//`define MASTER_SHADOW_CTRL 1
 //
 // Use data latches on CPU2BBC and/or BBC2CPU data transfers to improve hold times
 `define USE_DATA_LATCHES_BBC2CPU 1
@@ -36,6 +36,7 @@
 
 `define MAP_CC_DATA_SZ         8
 `define SHADOW_MEM_IDX         7
+`define MAP_MOS_IDX            5
 `define MAP_ROM_IDX            4
 `define MAP_HSCLK_EN_IDX       2
 `define CLK_CPUCLK_DIV_IDX_HI  1
@@ -76,7 +77,7 @@ module level1b_mk2_m (
                       inout [7:0]          cpu_data,
                       inout [7:0]          bbc_data,
                       inout [`GPIO_SZ-1:0] gpio,
-                      inout                rdy,
+                      input                rdy,
                       inout                nmib,
                       inout                irqb,
                       output               lat_en,
@@ -130,7 +131,6 @@ module level1b_mk2_m (
 
   wire                                 himem_vram_wr_d;
   wire [ `CPLD_REG_SEL_SZ-1:0]         cpld_reg_sel_d;
-  wire                                 rdy_w;
   wire                                 cpu_phi1_w;
   wire                                 cpu_phi2_w;
   wire                                 hs_selected_w;
@@ -165,7 +165,6 @@ module level1b_mk2_m (
   assign cpu_phi2 =  cpu_phi2_w ;
   
   assign bbc_sync = cpu_vpa & cpu_vda;
-  assign rdy = 1'bz;
   assign irqb = 1'bz;
   assign nmib = 1'bz;
 
@@ -258,11 +257,11 @@ module level1b_mk2_m (
     remapped_mos_access_r = 0;
     remapped_rom47_access_r = 0;
     remapped_romCF_access_r = 0;
-    if (!cpu_data[7] & map_data_q[`MAP_ROM_IDX] & cpu_adr[15] & (cpu_vpa|cpu_vda)) begin
+    if (!cpu_data[7] & cpu_adr[15] & (cpu_vpa|cpu_vda)) begin
       // Remap MOS from C000-FBFF only (exclude IO space and vectors)
-      if ( cpu_adr[14] & !(&(cpu_adr[13:10])))
+      if ( cpu_adr[14] & !(&(cpu_adr[13:10])) & map_data_q[`MAP_MOS_IDX] )
         remapped_mos_access_r = 1;
-      else if (!cpu_adr[14] ) begin
+      else if (!cpu_adr[14] & map_data_q[`MAP_ROM_IDX] ) begin
         if ( bbc_pagereg_q[3:2] == 2'b11)
           remapped_romCF_access_r = 1;
         else if (bbc_pagereg_q[3:2] == 2'b01)
@@ -318,6 +317,7 @@ module level1b_mk2_m (
 	    cpu_data_r = 8'b0  ;
 	    cpu_data_r[`MAP_HSCLK_EN_IDX]      = map_data_q[`MAP_HSCLK_EN_IDX] ;
 	    cpu_data_r[`SHADOW_MEM_IDX]        = map_data_q[`SHADOW_MEM_IDX];
+	    cpu_data_r[`MAP_MOS_IDX]           = map_data_q[`MAP_MOS_IDX];            
 	    cpu_data_r[`MAP_ROM_IDX]           = map_data_q[`MAP_ROM_IDX];
 	    cpu_data_r[`CLK_CPUCLK_DIV_IDX_HI] = map_data_q[`CLK_CPUCLK_DIV_IDX_HI];
 	    cpu_data_r[`CLK_CPUCLK_DIV_IDX_LO] = map_data_q[`CLK_CPUCLK_DIV_IDX_LO];
@@ -351,6 +351,7 @@ module level1b_mk2_m (
           // Not all bits are used so assign explicitly
 	  map_data_q[`MAP_HSCLK_EN_IDX]       <= cpu_data[`MAP_HSCLK_EN_IDX] ;
 	  map_data_q[`SHADOW_MEM_IDX]         <= cpu_data[`SHADOW_MEM_IDX];
+	  map_data_q[`MAP_MOS_IDX]            <= cpu_data[`MAP_MOS_IDX];
 	  map_data_q[`MAP_ROM_IDX]            <= cpu_data[`MAP_ROM_IDX];
 	  map_data_q[`CLK_CPUCLK_DIV_IDX_HI]  <= cpu_data[`CLK_CPUCLK_DIV_IDX_HI];
 	  map_data_q[`CLK_CPUCLK_DIV_IDX_LO]  <= cpu_data[`CLK_CPUCLK_DIV_IDX_LO];
@@ -368,7 +369,7 @@ module level1b_mk2_m (
     if ( !resetb )
         cpld_reg_sel_q <= {`CPLD_REG_SEL_SZ{1'b0}};
     else
-        cpld_reg_sel_q <= (cpu_vda) ? cpld_reg_sel_d : {`CPLD_REG_SEL_SZ{1'b0}};
+        cpld_reg_sel_q <= (rdy & cpu_vda) ? cpld_reg_sel_d : {`CPLD_REG_SEL_SZ{1'b0}};
 
   // Short pipeline to delay switching back to hs clock after an IO access to ensure any instruction
   // timed delays are respected.
@@ -392,11 +393,11 @@ module level1b_mk2_m (
   // Decode VDU routines then as   xxx0_1110
   always @ ( negedge cpu_phi2_w )
     if ( cpu_vpa & cpu_vda)
-      mos_vdu_sync_q <=   ((map_data_q[`MAP_ROM_IDX] && (cpu_hiaddr_lat_q[4:0]==5'h0E))||(!cpu_hiaddr_lat_q[7])) & (cpu_adr[15:13]==3'b110);
+      mos_vdu_sync_q <=   ((map_data_q[`MAP_MOS_IDX] && (cpu_hiaddr_lat_q[4:0]==5'h0E))||(!cpu_hiaddr_lat_q[7])) & (cpu_adr[15:13]==3'b110);
 
   // Latches for the high address bits open during PHI1
   always @ ( * )
-    if ( !cpu_phi2_w )
+    if ( rdy & !cpu_phi2_w )
       begin
         cpu_hiaddr_lat_q <= cpu_hiaddr_lat_d ;
         cpu_a15_lat_q <= cpu_a15_lat_d;
