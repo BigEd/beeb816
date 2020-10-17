@@ -85,9 +85,9 @@ NET "bbc_data[1]" SLOW ;
 NET "bbc_data[0]" SLOW ;
 NET "bbc_sync"  SLOW ;
 NET "bbc_rnw" SLOW ;
-NET "hsclk" FAST; # GCK1
-NET "bbc_phi0" FAST ; # GCK2
-NET "bbc_phi1" FAST ;
+NET "hsclk" SLOW; # GCK1
+NET "bbc_phi0" SLOW ; # GCK2
+NET "bbc_phi1" SLOW ;
 NET "bbc_phi2" SLOW;
 NET "rdy" SLOW;
 #NET "gpio[5]" SLOW;
@@ -104,7 +104,7 @@ NET "nmib" SLOW;
 NET "irqb" SLOW;
 NET "cpu_vda" SLOW  ;
 NET "cpu_vpb" SLOW  ;
-NET "cpu_phi2" FAST  ;
+NET "cpu_phi2" SLOW  ;
 NET "cpu_vpa" SLOW  ;
 NET "cpu_e" SLOW ;
 NET "cpu_rnw" SLOW  ;
