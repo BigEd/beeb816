@@ -25,7 +25,7 @@
 // `define MASTER_SHADOW_CTRL 1
 //
 // Use data latches on CPU2BBC and/or BBC2CPU data transfers to improve hold times
-//`define USE_DATA_LATCHES_BBC2CPU 1
+`define USE_DATA_LATCHES_BBC2CPU 1
 //`define USE_DATA_LATCHES_CPU2BBC 1
 //
 // Put latches on adr bits 13..8 (already have explicit latches on 14 and 15)
@@ -33,29 +33,6 @@
 //
 // Define this to use fast reads/slow writes to Shadow as with the VRAM to simplify decoding
 //`define CACHED_SHADOW_RAM 1
-//
-// Define this to add delay on the BBC and CPU clocks
-// `define ADD_CLOCK_DELAY   1
-// `define ADD_MORE_CLOCK_DELAY   1
-
-`define TRIAL_RUN 1
-`ifdef TRIAL_RUN
-// Trial settings to target BBC model B and Master and Electron with 10ns CPLD
-  `define USE_DATA_LATCHES_BBC2CPU 1
-`else
-// Previous settings for different CPLDs for BBC model B only
-`ifdef XC95108_7
-  // Trial settings for the XC95108-7 different from standard run
-  // Use data latches on BBC2CPU data transfers
-  `define ADD_CLOCK_DELAY   1
-  `define ADD_MORE_CLOCK_DELAY   1
-  `define USE_DATA_LATCHES_BBC2CPU 1
-  // This appears to fix the shadow mode issues with faster CPLD
-  `define CACHED_SHADOW_RAM 1
-`else
-  `define ADD_CLOCK_DELAY   1
-`endif
-`endif // !`ifdef TRIAL_RUN
 
 `define MAP_CC_DATA_SZ         8
 `define SHADOW_MEM_IDX         7
@@ -164,49 +141,13 @@ module level1b_mk2_m (
   wire                                 himem_w;
   wire                                 hisync_w;
 
-`ifdef ADD_CLOCK_DELAY
   // Force keep intermediate nets to preserve strict delay chain for clocks
   (* KEEP="TRUE" *) wire ckdel_1_b;
   (* KEEP="TRUE" *) wire ckdel_2;
-  (* KEEP="TRUE" *) wire ckdel_3_b;
-  (* KEEP="TRUE" *) wire ckdel_4;
+  (* KEEP="TRUE" *) wire ckdel_3_b;  
   INV    ckdel1   ( .I(bbc_phi0), .O(ckdel_1_b));
   INV    ckdel2   ( .I(ckdel_1_b),    .O(ckdel_2));
-  INV    ckdel3   ( .I(ckdel_2),      .O(ckdel_3_b));
-  INV    ckdel4   ( .I(ckdel_3_b),    .O(ckdel_4));
-`ifdef ADD_MORE_CLOCK_DELAY
-  (* KEEP="TRUE" *) wire ckdel_5_b;
-  (* KEEP="TRUE" *) wire ckdel_6;
-  INV    ckdel5   ( .I(ckdel_4),      .O(ckdel_5_b));
-  INV    ckdel6   ( .I(ckdel_5_b),    .O(ckdel_6));
-`endif
-  clkctrl_phi2 U_0 (
-                    .hsclk_in(hsclk),
-`ifdef ADD_MORE_CLOCK_DELAY
-                    .lsclk_in(ckdel_5_b),
-`else
-                    .lsclk_in(ckdel_3_b),
-`endif
-                    .rst_b(resetb),
-                    .hsclk_sel(sel_hs_w),
-                    .cpuclk_div_sel(map_data_q[`CLK_CPUCLK_DIV_IDX_HI:`CLK_CPUCLK_DIV_IDX_LO]),
-                    .hsclk_selected(hs_selected_w),
-                    .lsclk_selected(ls_selected_w),
-                    .clkout(cpu_phi1_w)
-                    );
-`ifdef ADD_MORE_CLOCK_DELAY
-  assign bbc_phi1 = ckdel_5_b;
-  assign bbc_phi2 = ckdel_6;
-`else
-  assign bbc_phi1 = ckdel_3_b;
-  assign bbc_phi2 = ckdel_4;
-`endif
-`else
-  // Force keep intermediate nets to preserve strict delay chain for clocks
-  (* KEEP="TRUE" *) wire ckdel_1_b;
-  (* KEEP="TRUE" *) wire ckdel_2;  
-  INV    ckdel1   ( .I(bbc_phi0), .O(ckdel_1_b));
-  INV    ckdel2   ( .I(ckdel_1_b),    .O(ckdel_2));
+  INV    ckdel3   ( .I(ckdel_2),    .O(ckdel_3_b));  
   clkctrl_phi2 U_0 (
                     .hsclk_in(hsclk),
                     .lsclk_in(ckdel_1_b),
@@ -219,10 +160,10 @@ module level1b_mk2_m (
                     );
   assign bbc_phi1 = ckdel_1_b;
   assign bbc_phi2 = ckdel_2;
-`endif
 
   assign cpu_phi2_w = !cpu_phi1_w ;
   assign cpu_phi2 =  cpu_phi2_w ;
+  
   assign bbc_sync = cpu_vpa & cpu_vda;
   assign rdy = 1'bz;
   assign irqb = 1'bz;
@@ -457,7 +398,7 @@ module level1b_mk2_m (
   always @ ( * )
     if ( !cpu_phi2_w )
       begin
-        cpu_hiaddr_lat_q <= cpu_hiaddr_lat_d;
+        cpu_hiaddr_lat_q <= cpu_hiaddr_lat_d ;
         cpu_a15_lat_q <= cpu_a15_lat_d;
         cpu_a14_lat_q <= cpu_a14_lat_d;
         himem_vram_wr_lat_q <= himem_vram_wr_d;

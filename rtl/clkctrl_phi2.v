@@ -18,7 +18,7 @@
 // Define this to enable the div2 clock divider function
 `define ENABLE_DIV2 1
 // Define this to enable the div4 clock divider function
-//`define ENABLE_DIV4 1
+`define ENABLE_DIV4 1
 
 module clkctrl_phi2(
                input       hsclk_in,
