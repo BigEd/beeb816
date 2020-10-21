@@ -211,7 +211,7 @@ module level1b_mk2_m (
 `ifdef USE_ADR_LATCHES_CPU2BBC
   assign bbc_adr = { ( (dummy_access_w) ? 2'b10 : { cpu_a15_lat_q, cpu_a14_lat_q}), cpu_adr_lat_q };
 `else
-  assign bbc_adr = (dummy_access_w) ? 8'h80 : cpu_adr[15:8];
+  assign bbc_adr = { ((dummy_access_w) ? 2'b10 : cpu_adr[15:14]), cpu_adr[13:8]};
 `endif
 
 
