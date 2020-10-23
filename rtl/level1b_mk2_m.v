@@ -33,6 +33,8 @@
 //
 // Define this to use fast reads/slow writes to Shadow as with the VRAM to simplify decoding
 //`define CACHED_SHADOW_RAM 1
+//`define DIRECT_DRIVE_A13_A8
+//`define NO_SELECT_FLOPS 1
 
 `define MAP_CC_DATA_SZ         8
 `define SHADOW_MEM_IDX         7
@@ -111,7 +113,13 @@ module level1b_mk2_m (
   reg [5:0]                            cpu_adr_lat_q;
 `endif
   // This is the internal register controlling which features like high speed clocks etc are enabled
-  reg [ `CPLD_REG_SEL_SZ-1:0]          cpld_reg_sel_q;
+
+`ifdef NO_SELECT_FLOPS
+  wire [ `CPLD_REG_SEL_SZ-1:0]          cpld_reg_sel_w;
+`else
+  reg [ `CPLD_REG_SEL_SZ-1:0]           cpld_reg_sel_q;
+  wire [ `CPLD_REG_SEL_SZ-1:0]          cpld_reg_sel_d;
+`endif
   // This will be a copy of the BBC ROM page register so we know which ROM is selected
   reg [`BBC_PAGEREG_SZ-1:0]            bbc_pagereg_q;
   reg [`MAP_CC_DATA_SZ-1:0]            map_data_q;
@@ -130,7 +138,6 @@ module level1b_mk2_m (
   wire                                 io_access_pipe_d;
 
   wire                                 himem_vram_wr_d;
-  wire [ `CPLD_REG_SEL_SZ-1:0]         cpld_reg_sel_d;
   wire                                 cpu_phi1_w;
   wire                                 cpu_phi2_w;
   wire                                 hs_selected_w;
@@ -144,10 +151,8 @@ module level1b_mk2_m (
   // Force keep intermediate nets to preserve strict delay chain for clocks
   (* KEEP="TRUE" *) wire ckdel_1_b;
   (* KEEP="TRUE" *) wire ckdel_2;
-  (* KEEP="TRUE" *) wire ckdel_3_b;  
   INV    ckdel1   ( .I(bbc_phi0), .O(ckdel_1_b));
   INV    ckdel2   ( .I(ckdel_1_b),    .O(ckdel_2));
-  INV    ckdel3   ( .I(ckdel_2),    .O(ckdel_3_b));  
   clkctrl_phi2 U_0 (
                     .hsclk_in(hsclk),
                     .lsclk_in(ckdel_1_b),
@@ -163,7 +168,7 @@ module level1b_mk2_m (
 
   assign cpu_phi2_w = !cpu_phi1_w ;
   assign cpu_phi2 =  cpu_phi2_w ;
-  
+
   assign bbc_sync = cpu_vpa & cpu_vda;
   assign irqb = 1'bz;
   assign nmib = 1'bz;
@@ -201,17 +206,29 @@ module level1b_mk2_m (
   // All addresses starting with 0b10 go to internal IO registers which update on the
   // rising edge of cpu_phi1 - use the cpu_data bus directly for the high address
   // bits since it's stable by the end of phi1
+
+`ifdef NO_SELECT_FLOPS
+  assign cpld_reg_sel_w[`CPLD_REG_SEL_MAP_CC_IDX] =  ( cpu_hiaddr_lat_q[7:6]== 2'b10) & cpu_vda;
+  assign cpld_reg_sel_w[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = (cpu_hiaddr_lat_q[7]== 1'b0) && ( cpu_adr == `PAGED_ROM_SEL ) & cpu_vda ;
+`ifdef MASTER_SHADOW_CTRL
+  assign cpld_reg_sel_w[`CPLD_REG_SEL_BBC_SHADOW_IDX] = (cpu_hiaddr_lat_q[7]== 1'b0) && ( cpu_adr == `SHADOW_RAM_SEL ) & cpu_vda;
+`endif
+`else
   assign cpld_reg_sel_d[`CPLD_REG_SEL_MAP_CC_IDX] =  ( cpu_data[7:6]== 2'b10);
   assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = (cpu_data[7]== 1'b0) && ( cpu_adr == `PAGED_ROM_SEL );
 `ifdef MASTER_SHADOW_CTRL
   assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_SHADOW_IDX] = (cpu_data[7]== 1'b0) && ( cpu_adr == `SHADOW_RAM_SEL );
 `endif
-
+`endif
   // Force dummy read access when accessing himem explicitly but not for remapped RAM accesses which can still complete
 `ifdef USE_ADR_LATCHES_CPU2BBC
   assign bbc_adr = { ( (dummy_access_w) ? 2'b10 : { cpu_a15_lat_q, cpu_a14_lat_q}), cpu_adr_lat_q };
 `else
+`ifdef DIRECT_DRIVE_A13_A8
   assign bbc_adr = { ((dummy_access_w) ? 2'b10 : cpu_adr[15:14]), cpu_adr[13:8]};
+`else
+  assign bbc_adr = { (dummy_access_w) ? 8'h80 : cpu_adr[15:8] };
+`endif
 `endif
 
 
@@ -312,12 +329,16 @@ module level1b_mk2_m (
     if ( cpu_phi2_w & cpu_rnw )
       begin
 	if (cpu_hiaddr_lat_q[7]) begin
+`ifdef NO_SELECT_FLOPS
+	  if (cpld_reg_sel_w[`CPLD_REG_SEL_MAP_CC_IDX] ) begin
+`else
 	  if (cpld_reg_sel_q[`CPLD_REG_SEL_MAP_CC_IDX] ) begin
+`endif
             // Not all bits are used so assign default first, then individual bits
 	    cpu_data_r = 8'b0  ;
 	    cpu_data_r[`MAP_HSCLK_EN_IDX]      = map_data_q[`MAP_HSCLK_EN_IDX] ;
 	    cpu_data_r[`SHADOW_MEM_IDX]        = map_data_q[`SHADOW_MEM_IDX];
-	    cpu_data_r[`MAP_MOS_IDX]           = map_data_q[`MAP_MOS_IDX];            
+	    cpu_data_r[`MAP_MOS_IDX]           = map_data_q[`MAP_MOS_IDX];
 	    cpu_data_r[`MAP_ROM_IDX]           = map_data_q[`MAP_ROM_IDX];
 	    cpu_data_r[`CLK_CPUCLK_DIV_IDX_HI] = map_data_q[`CLK_CPUCLK_DIV_IDX_HI];
 	    cpu_data_r[`CLK_CPUCLK_DIV_IDX_LO] = map_data_q[`CLK_CPUCLK_DIV_IDX_LO];
@@ -347,6 +368,24 @@ module level1b_mk2_m (
       end
     else
       begin
+`ifdef NO_SELECT_FLOPS
+        if (cpld_reg_sel_w[`CPLD_REG_SEL_MAP_CC_IDX] & !cpu_rnw) begin
+          // Not all bits are used so assign explicitly
+	  map_data_q[`MAP_HSCLK_EN_IDX]       <= cpu_data[`MAP_HSCLK_EN_IDX] ;
+	  map_data_q[`SHADOW_MEM_IDX]         <= cpu_data[`SHADOW_MEM_IDX];
+	  map_data_q[`MAP_MOS_IDX]            <= cpu_data[`MAP_MOS_IDX];
+	  map_data_q[`MAP_ROM_IDX]            <= cpu_data[`MAP_ROM_IDX];
+	  map_data_q[`CLK_CPUCLK_DIV_IDX_HI]  <= cpu_data[`CLK_CPUCLK_DIV_IDX_HI];
+	  map_data_q[`CLK_CPUCLK_DIV_IDX_LO]  <= cpu_data[`CLK_CPUCLK_DIV_IDX_LO];
+        end
+        else if (cpld_reg_sel_w[`CPLD_REG_SEL_BBC_PAGEREG_IDX] & !cpu_rnw )
+          bbc_pagereg_q <= cpu_data;
+`ifdef MASTER_SHADOW_CTRL
+        else if (cpld_reg_sel_w[`CPLD_REG_SEL_BBC_SHADOW_IDX] & !cpu_rnw )
+          map_data_q[`SHADOW_MEM_IDX] <= cpu_data[`SHADOW_MEM_IDX];
+`endif
+      end // else: !if( !resetb )
+`else
         if (cpld_reg_sel_q[`CPLD_REG_SEL_MAP_CC_IDX] & !cpu_rnw ) begin
           // Not all bits are used so assign explicitly
 	  map_data_q[`MAP_HSCLK_EN_IDX]       <= cpu_data[`MAP_HSCLK_EN_IDX] ;
@@ -363,13 +402,17 @@ module level1b_mk2_m (
           map_data_q[`SHADOW_MEM_IDX] <= cpu_data[`SHADOW_MEM_IDX];
 `endif
       end // else: !if( !resetb )
+`endif // !`ifdef NO_SELECT_FLOPS
 
+`ifndef NO_SELECT_FLOPS
   // Flop all the internal register sel bits on falling edge of phi1
   always @ ( posedge cpu_phi2_w or negedge resetb )
     if ( !resetb )
         cpld_reg_sel_q <= {`CPLD_REG_SEL_SZ{1'b0}};
     else
         cpld_reg_sel_q <= (rdy & cpu_vda) ? cpld_reg_sel_d : {`CPLD_REG_SEL_SZ{1'b0}};
+`endif
+
 
   // Short pipeline to delay switching back to hs clock after an IO access to ensure any instruction
   // timed delays are respected.
