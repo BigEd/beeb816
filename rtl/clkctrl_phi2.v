@@ -18,7 +18,7 @@
 // Define this to enable the div2 clock divider function
 `define ENABLE_DIV2 1
 // Define this to enable the div4 clock divider function
-//`define ENABLE_DIV4 1
+`define ENABLE_DIV4 1
 
 module clkctrl_phi2(
                input       hsclk_in,
@@ -97,7 +97,10 @@ module clkctrl_phi2(
     if ( ! rst_b )
       pipe_retime_ls_enable_q <= {`HS_PIPE_SZ{1'b1}};
     else
-      pipe_retime_ls_enable_q <= {!pipe_retime_hs_enable_q[0], pipe_retime_ls_enable_q[`HS_PIPE_SZ-1:1]};
+      if ( ls_enable_q )
+        pipe_retime_ls_enable_q <= {`HS_PIPE_SZ{1'b1}};
+      else
+        pipe_retime_ls_enable_q <= {!pipe_retime_hs_enable_q[0], pipe_retime_ls_enable_q[`HS_PIPE_SZ-1:1]};
 
   always @ ( negedge  lsclk_in or posedge hs_enable_q )
     if ( hs_enable_q )
