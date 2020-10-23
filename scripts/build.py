@@ -389,7 +389,7 @@ def cpldfit( ):
     command_list.append("-inputs 20 \\")
     command_list.append("-pterms 20 \\")
     # Additional options for xc9500
-    if g_target.startswith("xc95") :
+    if g_target.startswith("xc95") and not g_target.endswith("100") :
         command_list.append("-power std -localfbk -pinfbk \\")
         command_list.append("-unused float \\")        
 ##    command_list.append("-exhaust \\")
