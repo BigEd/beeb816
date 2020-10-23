@@ -33,8 +33,8 @@
 //
 // Define this to use fast reads/slow writes to Shadow as with the VRAM to simplify decoding
 //`define CACHED_SHADOW_RAM 1
-`define DIRECT_DRIVE_A13_A8
-`define NO_SELECT_FLOPS 1
+//`define DIRECT_DRIVE_A13_A8
+//`define NO_SELECT_FLOPS 1
 
 `define MAP_CC_DATA_SZ         8
 `define SHADOW_MEM_IDX         7
