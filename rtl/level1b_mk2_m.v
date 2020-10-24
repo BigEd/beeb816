@@ -8,18 +8,17 @@
 //
 // Interrupts are not handled in '816 mode so leave this undefined for now
 //`ifdef REMAP_NATIVE_INTERRUPTS_D
-// Depth of pipeline to delay switches to HS clock after an IO access. Need more cycles for
+// Need to delay switches to HS clock after an IO access. Need more cycles for
 // faster clocks so ideally this should be linked with the divider setting. Over 16MHz needs
-// 5 cycles but 13.8MHz seems ok with 4.
-`define IO_ACCESS_DELAY_SZ     5
+// 5 cycles but 13.8MHz seems ok with 4. Counter size must be large enough to cope with
+// delay count - 1 (ie delay of 5 needs 2 bits because the final go signal is pipelined)
+`define IO_ACCESS_DELAY  5
+`define IO_ACCESS_SZ 2
 // Define this to get a clean deassertion/reassertion of RAM CEB but this limits some
 // setup time from CEB low to data valid etc. Not an issue in a board with a faster
 // SMD RAM so expect to set this in the final design, but omitting it can help with
 // speed in the proto
 //`define ASSERT_RAMCEB_IN_PHI2  1
-//
-// Define this for the Acorn Electron instead of BBC Micro
-// `define ELECTRON 1
 //
 // Define this for BBC B+/Master Shadow RAM control
 //`define MASTER_SHADOW_CTRL 1
@@ -36,7 +35,7 @@
 //`define DIRECT_DRIVE_A13_A8
 //`define NO_SELECT_FLOPS 1
 
-// Define this so that *TURBO enables both MOS and APPs ROMs 
+// Define this so that *TURBO enables both MOS and APPs ROMs
 `define UNIFY_ROM_REMAP_BITS 1
 
 // Define this for lazy decoding of bottom two bits in ROM paging, shadow RAM selection
@@ -71,7 +70,7 @@
 
 `ifdef LAZY_REGISTER_DECODE
   `define PAGED_ROM_SELECTION ( {cpu_adr[15:2], 2'b0} == `PAGED_ROM_SEL)
-  `define SHADOW_RAM_SELECTION ( {cpu_adr[15:2], 2'b0} == `SHADOW_RAM_SEL) 
+  `define SHADOW_RAM_SELECTION ( {cpu_adr[15:2], 2'b0} == `SHADOW_RAM_SEL)
 `else
   // Default to full decode for the BBC B - seems unreliable otherwise although the Master seems ok with it
   `define PAGED_ROM_SELECTION (cpu_adr== `PAGED_ROM_SEL)
@@ -143,9 +142,9 @@ module level1b_mk2_m (
   reg                                  cpu_a15_lat_q;
   reg                                  cpu_a14_lat_q;
   reg [7:0]                            cpu_hiaddr_lat_d;
-  reg [ `IO_ACCESS_DELAY_SZ-1:0]       io_access_pipe_q;
-  wire                                 io_access_pipe_d;
-
+  reg [ `IO_ACCESS_SZ-1:0]             io_access_ctr_q;
+  reg                                  io_access_go_q;
+  wire                                 io_access_ctr_d;
   wire                                 himem_vram_wr_d;
   wire                                 cpu_phi1_w;
   wire                                 cpu_phi2_w;
@@ -228,7 +227,7 @@ module level1b_mk2_m (
   assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = (cpu_data[7]== 1'b0) && `PAGED_ROM_SELECTION ;
 `ifdef MASTER_SHADOW_CTRL
   assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_SHADOW_IDX] = (cpu_data[7]== 1'b0) && `SHADOW_RAM_SELECTION ;
-  
+
 `endif
 `endif
 
@@ -263,7 +262,7 @@ module level1b_mk2_m (
 
   // Check for write accesses to some of IO space (FE4x) in case we need to delay switching back to HS clock
   // so that min pulse widths to sound chip/reading IO are respected
-  assign io_access_pipe_d = !cpu_hiaddr_lat_q[7] & (cpu_adr[15:4]==12'hFE4) & cpu_vda ;
+  assign io_access_ctr_d = !cpu_hiaddr_lat_q[7] & (cpu_adr[15:4]==12'hFE4) & cpu_vda ;
 
   // Sel the high speed clock only
   // * on valid instruction fetches from himem, or
@@ -271,7 +270,7 @@ module level1b_mk2_m (
   // * on invalid bus cycles if hs clock is already selected
   assign himem_w =  cpu_hiaddr_lat_q[7] & !himem_vram_wr_lat_q;
   assign hisync_w = (cpu_vpa&cpu_vda) & cpu_hiaddr_lat_q[7];
-  assign sel_hs_w = map_data_q[`MAP_HSCLK_EN_IDX] & (( hisync_w & !io_access_pipe_q[0] ) |
+  assign sel_hs_w = map_data_q[`MAP_HSCLK_EN_IDX] & (( hisync_w & io_access_go_q ) |
                                                      ( himem_w & hs_selected_w) |
                                                      (!cpu_vpa & !cpu_vda & hs_selected_w)
                                                      ) ;
@@ -401,10 +400,18 @@ module level1b_mk2_m (
 `endif
 
 
-  // Short pipeline to delay switching back to hs clock after an IO access to ensure any instruction
-  // timed delays are respected.
-  always @ ( negedge cpu_phi2_w )
-      io_access_pipe_q <= ( io_access_pipe_q >> 1 )| {`IO_ACCESS_DELAY_SZ{ io_access_pipe_d }};
+  always @ ( negedge cpu_phi2_w or negedge resetb)
+    if ( !resetb ) begin
+      io_access_go_q <= 1'b1;      
+      io_access_ctr_q  <= 0;
+    end
+    else begin
+      if (io_access_ctr_d )
+        io_access_ctr_q <= `IO_ACCESS_DELAY - 1;
+      else
+        io_access_ctr_q <= (|io_access_ctr_q == 0) ? 0 : io_access_ctr_q -1 ;
+      io_access_go_q <= (io_access_ctr_q == 0) && !io_access_ctr_d;
+    end
 
   // Instruction was fetched from VDU routines in MOS if
   // - in the range EEC000 - EEDFFF (if remapped to himem)
