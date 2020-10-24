@@ -37,7 +37,7 @@
 //`define NO_SELECT_FLOPS 1
 
 // Define this so that *TURBO enables both MOS and APPs ROMs 
-//`define UNIFY_ROM_REMAP_BITS 1
+`define UNIFY_ROM_REMAP_BITS 1
 
 `define MAP_CC_DATA_SZ         8
 `define SHADOW_MEM_IDX         7
@@ -63,14 +63,9 @@
 `define CPLD_REG_SEL_BBC_PAGEREG_IDX 0
 
 
-// Address of ROM selection reg in BBC memory map
-`ifdef ELECTRON
-  `define PAGED_ROM_SEL 16'hFE05
-`else
-  `define PAGED_ROM_SEL 16'hFE30
-  // BBC B+ and Master use bit 7 of &FE34 for shadow RAM select
-  `define SHADOW_RAM_SEL 16'hFE34
-`endif
+`define PAGED_ROM_SEL 16'hFE30
+// BBC B+ uses bit 7 of &FE34 for shadow RAM select
+`define SHADOW_RAM_SEL 16'hFE34
 
 module level1b_mk2_m (
                       input [15:0]         cpu_adr,
@@ -212,16 +207,16 @@ module level1b_mk2_m (
   // bits since it's stable by the end of phi1
 `ifdef NO_SELECT_FLOPS
   assign cpld_reg_sel_w[`CPLD_REG_SEL_MAP_CC_IDX] =  (cpu_hiaddr_lat_q[7:6]== 2'b10) && cpu_vda  && rdy ;
-  assign cpld_reg_sel_w[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = (cpu_hiaddr_lat_q[7]== 1'b0) && ( cpu_adr == `PAGED_ROM_SEL ) && cpu_vda && rdy;
+  assign cpld_reg_sel_w[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = (cpu_hiaddr_lat_q[7]== 1'b0) && ( {cpu_adr[15:2],2'b00} == `PAGED_ROM_SEL ) && cpu_vda && rdy;
   `ifdef MASTER_SHADOW_CTRL
-  assign cpld_reg_sel_w[`CPLD_REG_SEL_BBC_SHADOW_IDX] = (cpu_hiaddr_lat_q[7]== 1'b0) && ( cpu_adr == `SHADOW_RAM_SEL ) && cpu_vda && rdy;
+  assign cpld_reg_sel_w[`CPLD_REG_SEL_BBC_SHADOW_IDX] = (cpu_hiaddr_lat_q[7]== 1'b0) && ( {cpu_adr[15:2],2'b00} == `SHADOW_RAM_SEL ) && cpu_vda && rdy;
   `endif
 `else
   assign cpld_reg_sel_w = cpld_reg_sel_q;
   assign cpld_reg_sel_d[`CPLD_REG_SEL_MAP_CC_IDX] =  ( cpu_data[7:6]== 2'b10);
-  assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = (cpu_data[7]== 1'b0) && ( cpu_adr == `PAGED_ROM_SEL );
+  assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = (cpu_data[7]== 1'b0) && (  {cpu_adr[15:2],2'b00} == `PAGED_ROM_SEL );
 `ifdef MASTER_SHADOW_CTRL
-  assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_SHADOW_IDX] = (cpu_data[7]== 1'b0) && ( cpu_adr == `SHADOW_RAM_SEL );
+  assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_SHADOW_IDX] = (cpu_data[7]== 1'b0) && (  {cpu_adr[15:2],2'b00} == `SHADOW_RAM_SEL );
 `endif
 `endif
 
