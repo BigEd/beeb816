@@ -113,10 +113,7 @@ module level1b_mk2_m (
   reg [5:0]                            cpu_adr_lat_q;
 `endif
   // This is the internal register controlling which features like high speed clocks etc are enabled
-
-`ifdef NO_SELECT_FLOPS
-  wire [ `CPLD_REG_SEL_SZ-1:0]          cpld_reg_sel_w;
-`else
+`ifndef NO_SELECT_FLOPS
   reg [ `CPLD_REG_SEL_SZ-1:0]           cpld_reg_sel_q;
   wire [ `CPLD_REG_SEL_SZ-1:0]          cpld_reg_sel_d;
 `endif
@@ -147,6 +144,7 @@ module level1b_mk2_m (
   wire                                 native_mode_int_w;
   wire                                 himem_w;
   wire                                 hisync_w;
+  wire [ `CPLD_REG_SEL_SZ-1:0]         cpld_reg_sel_w;
 
   // Force keep intermediate nets to preserve strict delay chain for clocks
   (* KEEP="TRUE" *) wire ckdel_1_b;
@@ -203,23 +201,25 @@ module level1b_mk2_m (
   assign ram_web = cpu_rnw | cpu_phi1_w | rom_wr_protect_lat_q ;
 `endif
 
+
   // All addresses starting with 0b10 go to internal IO registers which update on the
   // rising edge of cpu_phi1 - use the cpu_data bus directly for the high address
   // bits since it's stable by the end of phi1
-
 `ifdef NO_SELECT_FLOPS
-  assign cpld_reg_sel_w[`CPLD_REG_SEL_MAP_CC_IDX] =  ( cpu_hiaddr_lat_q[7:6]== 2'b10) & cpu_vda;
-  assign cpld_reg_sel_w[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = (cpu_hiaddr_lat_q[7]== 1'b0) && ( cpu_adr == `PAGED_ROM_SEL ) & cpu_vda ;
-`ifdef MASTER_SHADOW_CTRL
-  assign cpld_reg_sel_w[`CPLD_REG_SEL_BBC_SHADOW_IDX] = (cpu_hiaddr_lat_q[7]== 1'b0) && ( cpu_adr == `SHADOW_RAM_SEL ) & cpu_vda;
-`endif
+  assign cpld_reg_sel_w[`CPLD_REG_SEL_MAP_CC_IDX] =  (cpu_hiaddr_lat_q[7:6]== 2'b10) && cpu_vda  && rdy ;
+  assign cpld_reg_sel_w[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = (cpu_hiaddr_lat_q[7]== 1'b0) && ( cpu_adr == `PAGED_ROM_SEL ) && cpu_vda && rdy;
+  `ifdef MASTER_SHADOW_CTRL
+  assign cpld_reg_sel_w[`CPLD_REG_SEL_BBC_SHADOW_IDX] = (cpu_hiaddr_lat_q[7]== 1'b0) && ( cpu_adr == `SHADOW_RAM_SEL ) && cpu_vda && rdy;
+  `endif
 `else
+  assign cpld_reg_sel_w = cpld_reg_sel_q;
   assign cpld_reg_sel_d[`CPLD_REG_SEL_MAP_CC_IDX] =  ( cpu_data[7:6]== 2'b10);
   assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = (cpu_data[7]== 1'b0) && ( cpu_adr == `PAGED_ROM_SEL );
 `ifdef MASTER_SHADOW_CTRL
   assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_SHADOW_IDX] = (cpu_data[7]== 1'b0) && ( cpu_adr == `SHADOW_RAM_SEL );
 `endif
 `endif
+
   // Force dummy read access when accessing himem explicitly but not for remapped RAM accesses which can still complete
 `ifdef USE_ADR_LATCHES_CPU2BBC
   assign bbc_adr = { ( (dummy_access_w) ? 2'b10 : { cpu_a15_lat_q, cpu_a14_lat_q}), cpu_adr_lat_q };
@@ -230,8 +230,6 @@ module level1b_mk2_m (
   assign bbc_adr = { (dummy_access_w) ? 8'h80 : cpu_adr[15:8] };
 `endif
 `endif
-
-
 
   assign bbc_rnw = cpu_rnw | dummy_access_w ;
 `ifdef USE_DATA_LATCHES_CPU2BBC
@@ -329,11 +327,7 @@ module level1b_mk2_m (
     if ( cpu_phi2_w & cpu_rnw )
       begin
 	if (cpu_hiaddr_lat_q[7]) begin
-`ifdef NO_SELECT_FLOPS
 	  if (cpld_reg_sel_w[`CPLD_REG_SEL_MAP_CC_IDX] ) begin
-`else
-	  if (cpld_reg_sel_q[`CPLD_REG_SEL_MAP_CC_IDX] ) begin
-`endif
             // Not all bits are used so assign default first, then individual bits
 	    cpu_data_r = 8'b0  ;
 	    cpu_data_r[`MAP_HSCLK_EN_IDX]      = map_data_q[`MAP_HSCLK_EN_IDX] ;
@@ -368,7 +362,6 @@ module level1b_mk2_m (
       end
     else
       begin
-`ifdef NO_SELECT_FLOPS
         if (cpld_reg_sel_w[`CPLD_REG_SEL_MAP_CC_IDX] & !cpu_rnw) begin
           // Not all bits are used so assign explicitly
 	  map_data_q[`MAP_HSCLK_EN_IDX]       <= cpu_data[`MAP_HSCLK_EN_IDX] ;
@@ -385,24 +378,6 @@ module level1b_mk2_m (
           map_data_q[`SHADOW_MEM_IDX] <= cpu_data[`SHADOW_MEM_IDX];
 `endif
       end // else: !if( !resetb )
-`else
-        if (cpld_reg_sel_q[`CPLD_REG_SEL_MAP_CC_IDX] & !cpu_rnw ) begin
-          // Not all bits are used so assign explicitly
-	  map_data_q[`MAP_HSCLK_EN_IDX]       <= cpu_data[`MAP_HSCLK_EN_IDX] ;
-	  map_data_q[`SHADOW_MEM_IDX]         <= cpu_data[`SHADOW_MEM_IDX];
-	  map_data_q[`MAP_MOS_IDX]            <= cpu_data[`MAP_MOS_IDX];
-	  map_data_q[`MAP_ROM_IDX]            <= cpu_data[`MAP_ROM_IDX];
-	  map_data_q[`CLK_CPUCLK_DIV_IDX_HI]  <= cpu_data[`CLK_CPUCLK_DIV_IDX_HI];
-	  map_data_q[`CLK_CPUCLK_DIV_IDX_LO]  <= cpu_data[`CLK_CPUCLK_DIV_IDX_LO];
-        end
-        else if (cpld_reg_sel_q[`CPLD_REG_SEL_BBC_PAGEREG_IDX] & !cpu_rnw )
-          bbc_pagereg_q <= cpu_data;
-`ifdef MASTER_SHADOW_CTRL
-        else if (cpld_reg_sel_q[`CPLD_REG_SEL_BBC_SHADOW_IDX] & !cpu_rnw )
-          map_data_q[`SHADOW_MEM_IDX] <= cpu_data[`SHADOW_MEM_IDX];
-`endif
-      end // else: !if( !resetb )
-`endif // !`ifdef NO_SELECT_FLOPS
 
 `ifndef NO_SELECT_FLOPS
   // Flop all the internal register sel bits on falling edge of phi1
