@@ -34,12 +34,10 @@
 //`define CACHED_SHADOW_RAM 1
 //`define DIRECT_DRIVE_A13_A8
 //`define NO_SELECT_FLOPS 1
-
 // Define this so that *TURBO enables both MOS and APPs ROMs
 `define UNIFY_ROM_REMAP_BITS 1
-
 // Define this for lazy decoding of bottom two bits in ROM paging, shadow RAM selection
-// `define LAZY_REGISTER_DECODE 1
+//`define LAZY_REGISTER_DECODE 1
 
 `define MAP_CC_DATA_SZ         8
 `define SHADOW_MEM_IDX         7
@@ -402,12 +400,12 @@ module level1b_mk2_m (
 
   always @ ( negedge cpu_phi2_w or negedge resetb)
     if ( !resetb ) begin
-      io_access_go_q <= 1'b1;      
+      io_access_go_q <= 1'b1;
       io_access_ctr_q  <= 0;
     end
     else begin
       if (io_access_ctr_d )
-        io_access_ctr_q <= `IO_ACCESS_DELAY - 1;
+        io_access_ctr_q <= `IO_ACCESS_DELAY - 2; // subtract 1 for additional pipe, another for max count
       else
         io_access_ctr_q <= (|io_access_ctr_q == 0) ? 0 : io_access_ctr_q -1 ;
       io_access_go_q <= (io_access_ctr_q == 0) && !io_access_ctr_d;
@@ -446,7 +444,7 @@ module level1b_mk2_m (
 `ifdef USE_DATA_LATCHES_BBC2CPU
   // Latches for the BBC data open during PHI2 to be stable beyond cycle end
   always @ ( * )
-    if ( !bbc_phi1 )
+    if ( bbc_phi0 )
       bbc_data_lat_q <= bbc_data;
 `endif
 
