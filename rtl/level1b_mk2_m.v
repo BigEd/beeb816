@@ -36,14 +36,20 @@
 //`define DIRECT_DRIVE_A13_A8
 //`define NO_SELECT_FLOPS 1
 
+// Define this so that *TURBO enables both MOS and APPs ROMs 
+//`define UNIFY_ROM_REMAP_BITS 1
+
 `define MAP_CC_DATA_SZ         8
 `define SHADOW_MEM_IDX         7
-`define MAP_MOS_IDX            5
 `define MAP_ROM_IDX            4
+`ifdef UNIFY_ROM_REMAP_BITS
+  `define MAP_MOS_IDX          `MAP_ROM_IDX
+`else
+  `define MAP_MOS_IDX            5
+`endif
 `define MAP_HSCLK_EN_IDX       2
 `define CLK_CPUCLK_DIV_IDX_HI  1
 `define CLK_CPUCLK_DIV_IDX_LO  0
-
 `define BBC_PAGEREG_SZ         4    // only the bottom four ROM selection bits
 `define GPIO_SZ                3
 
@@ -200,7 +206,6 @@ module level1b_mk2_m (
   assign gpio[0] = cpu_phi1_w ;
   assign ram_web = cpu_rnw | cpu_phi1_w | rom_wr_protect_lat_q ;
 `endif
-
 
   // All addresses starting with 0b10 go to internal IO registers which update on the
   // rising edge of cpu_phi1 - use the cpu_data bus directly for the high address
