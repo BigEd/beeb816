@@ -95,17 +95,19 @@ module l1b_mk2();
   
   
   
-  smallcap c100pf_LPF (
-                       .p1(bbc_phi0_filt),
-                       .p0(GND)                       
-                       );
+  smallcap c47pf (
+                  .p1(bbc_phi0_filt),
+                  .p0(GND)                       
+                  );
   
-  resistor r47_LPF(
-                   .p0(bbc_phi0_filt),
-                   .p1(bbc_phi0)                   
-                   );
-  
-  
+  resistor r100_1 (
+                .p0(bbc_phi0_filt),
+                .p1(bbc_phi0)                   
+                );
+  resistor r10k (
+                .p0(VDD),
+                .p1(rdy)                   
+                );
   
   // Alliance 512K x 8 SRAM - address pins wired to suit layout
   bs62lv4006  SRAM (
