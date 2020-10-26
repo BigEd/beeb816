@@ -46,7 +46,6 @@ module clkctrl_phi2(
   reg [`HS_PIPE_SZ-1:0]   pipe_retime_ls_enable_q;
   reg [`LS_PIPE_SZ-1:0]   pipe_retime_hs_enable_q;
 
-  wire                    clkout_pre1_w;
   wire                    retimed_ls_enable_w = pipe_retime_ls_enable_q[0];
   wire                    retimed_hs_enable_w = pipe_retime_hs_enable_q[0];
 
