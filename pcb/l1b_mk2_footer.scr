@@ -60,6 +60,7 @@ MOV r10k      ( 0.80  3.05) ;
 # SMD Caps on the back of the board
 MIRROR C100N_10;
 MIRROR C100N_11;
+MIRROR C100N_12;
 
 Window Fit;
 
