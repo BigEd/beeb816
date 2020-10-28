@@ -86,9 +86,9 @@ Auto load /tmp/auto-params-l1b.ctl;
 AUTO
 ## Define power fills top and bottom over whole board area
 layer Top ;
-polygon VDD 0.08 (0 0) (0 3.2) (3.92 3.2) (3.92 0) (0 0) ;
+polygon VDD 0.02 (0 0) (0 3.2) (3.92 3.2) (3.92 0) (0 0) ;
 layer Bottom ;
-polygon VSS 0.08 (0 0) (0 3.2) (3.92 3.2) (3.92 0) (0 0) ;
+polygon VSS 0.02 (0 0) (0 3.2) (3.92 3.2) (3.92 0) (0 0) ;
 
 RatsNest;   # to show incomplete wires and polygons
 
