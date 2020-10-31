@@ -36,7 +36,7 @@
 //`define DIRECT_DRIVE_A13_A8
 //`define NO_SELECT_FLOPS 1
 
-// Define this so that *TURBO enables both MOS and APPs ROMs 
+// Define this so that *TURBO enables both MOS and APPs ROMs
 `define UNIFY_ROM_REMAP_BITS 1
 
 // Define this for lazy decoding of bottom two bits in ROM paging, shadow RAM selection
@@ -71,7 +71,7 @@
 
 `ifdef LAZY_REGISTER_DECODE
   `define PAGED_ROM_SELECTION ( {cpu_adr[15:2], 2'b0} == `PAGED_ROM_SEL)
-  `define SHADOW_RAM_SELECTION ( {cpu_adr[15:2], 2'b0} == `SHADOW_RAM_SEL) 
+  `define SHADOW_RAM_SELECTION ( {cpu_adr[15:2], 2'b0} == `SHADOW_RAM_SEL)
 `else
   // Default to full decode for the BBC B - seems unreliable otherwise although the Master seems ok with it
   `define PAGED_ROM_SELECTION (cpu_adr== `PAGED_ROM_SEL)
@@ -228,7 +228,7 @@ module level1b_mk2_m (
   assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = (cpu_data[7]== 1'b0) && `PAGED_ROM_SELECTION ;
 `ifdef MASTER_SHADOW_CTRL
   assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_SHADOW_IDX] = (cpu_data[7]== 1'b0) && `SHADOW_RAM_SELECTION ;
-  
+
 `endif
 `endif
 
@@ -251,15 +251,8 @@ module level1b_mk2_m (
 `endif
   assign cpu_data = cpu_data_r;
 
-`ifdef CACHED_SHADOW_RAM
-  // Simpler decoding but less performance if we make the shadow and VRAM options behave the same way by
-  // using fast reads but slow writes
-  assign himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | (cpu_adr[13]&cpu_adr[12]))  & !cpu_rnw  ;
-`else
-  // In shadow mode video memory is never remapped so don't mark any of RAM for slow down
-  // In non-shadow mode, cache video RAM accesses instead and mark VRAM writes for slow speed (0x3000-0x7FFF)
-  assign himem_vram_wr_d = !map_data_q[`SHADOW_MEM_IDX] & !cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | (cpu_adr[13]&cpu_adr[12]))  & !cpu_rnw  ;
-`endif
+  // Identify Video RAM so that in non shadow mode VRAM writes can be slowed down
+  assign himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | (cpu_adr[13]&cpu_adr[12]))  ;
 
   // Check for write accesses to some of IO space (FE4x) in case we need to delay switching back to HS clock
   // so that min pulse widths to sound chip/reading IO are respected
@@ -269,7 +262,13 @@ module level1b_mk2_m (
   // * on valid instruction fetches from himem, or
   // * on valid imm/data fetches from himem _if_ hs clock is already selected, or
   // * on invalid bus cycles if hs clock is already selected
-  assign himem_w =  cpu_hiaddr_lat_q[7] & !himem_vram_wr_lat_q;
+  //
+  // Option cached_shadow_ram can simplify the logic at the cost of making shadow and VRAM accesses both fast read/slow write
+`ifdef CACHED_SHADOW_RAM
+  assign himem_w =  (cpu_vpa|cpu_vda) & cpu_hiaddr_lat_q[7] & (!himem_vram_wr_lat_q | cpu_rnw );
+`else
+  assign himem_w =  (cpu_vpa|cpu_vda) & cpu_hiaddr_lat_q[7] & (!himem_vram_wr_lat_q | cpu_rnw | map_data_q[`SHADOW_MEM_IDX]);
+`endif
   assign hisync_w = (cpu_vpa&cpu_vda) & cpu_hiaddr_lat_q[7];
   assign sel_hs_w = map_data_q[`MAP_HSCLK_EN_IDX] & (( hisync_w & !io_access_pipe_q[0] ) |
                                                      ( himem_w & hs_selected_w) |
