@@ -20,6 +20,7 @@ module l1b_mk2();
    // busses have to be bit blasted.
   wire     cpu_d0, cpu_d1, cpu_d2, cpu_d3, cpu_d4, cpu_d5, cpu_d6, cpu_d7;
   wire     bbc_d0, bbc_d1, bbc_d2, bbc_d3, bbc_d4, bbc_d5, bbc_d6, bbc_d7;
+  wire     bbc_dd0, bbc_dd1, bbc_dd2, bbc_dd3, bbc_dd4, bbc_dd5, bbc_dd6, bbc_dd7;
   wire     bbc_a0, bbc_a1, bbc_a2, bbc_a3, bbc_a4, bbc_a5, bbc_a6, bbc_a7;
   wire     bbc_a8, bbc_a9, bbc_a10, bbc_a11, bbc_a12, bbc_a13, bbc_a14, bbc_a15;
   wire     cpu_a0, cpu_a1, cpu_a2, cpu_a3, cpu_a4, cpu_a5, cpu_a6, cpu_a7, cpu_a8, cpu_a9,
@@ -34,6 +35,7 @@ module l1b_mk2();
   wire     tdo, tdi, tck, tms, tdi_int;
   wire     bbc_phi0_filt;  
   wire     j0, j1;
+  wire     tp0, tp1;
   wire     dec_fe4x;
   wire     dec_shadow_reg;
   wire     dec_rom_reg;
@@ -45,9 +47,20 @@ module l1b_mk2();
   cap100nf c100n_3 (.p0(GND), .p1(VDD));
   cap100nf c100n_4 (.p0(VDD), .p1(GND));
   cap100nf c100n_5 (.p0(GND), .p1(VDD));
+  cap100nf c100n_6 (.p0(GND), .p1(VDD));
   cap100nf_smd c100n_10 (.p0(GND), .p1(VDD));
   cap100nf_smd c100n_11 (.p0(GND), .p1(VDD));
   cap100nf_smd c100n_12 (.p0(GND), .p1(VDD));  
+
+  vresistor r100_0 ( .p0(bbc_d0), .p1(bbc_dd0) );
+  vresistor r100_1 ( .p0(bbc_d1), .p1(bbc_dd1) );
+  vresistor r100_2 ( .p0(bbc_d2), .p1(bbc_dd2) );
+  vresistor r100_3 ( .p0(bbc_d3), .p1(bbc_dd3) );
+  vresistor r100_4 ( .p0(bbc_d4), .p1(bbc_dd4) );
+  vresistor r100_5 ( .p0(bbc_d5), .p1(bbc_dd5) );
+  vresistor r100_6 ( .p0(bbc_d6), .p1(bbc_dd6) );
+  vresistor r100_7 ( .p0(bbc_d7), .p1(bbc_dd7) );  
+  
   
   // WDC 65816 CPU
   wdc65816 CPU (
@@ -100,11 +113,11 @@ module l1b_mk2();
                   .p0(GND)                       
                   );
   
-  resistor r100_1 (
+  resistor r100_8 (
                 .p0(bbc_phi0_filt),
                 .p1(bbc_phi0)                   
                 );
-  resistor r10k (
+  resistor r47k (
                 .p0(VDD),
                 .p1(rdy)                   
                 );
@@ -133,15 +146,15 @@ module l1b_mk2();
   xc95108_pc84  CPLD (
 
                       // RHS (lower)
-		      .p75(bbc_d7),
-		      .gts1(bbc_d6),
-		      .gts2(bbc_d5),
+		      .p75(bbc_a12),
+		      .gts1(bbc_a13),
+		      .gts2(bbc_a15),
 		      .vccint3(VDD),
 		      .p79(bbc_a14),
-		      .p80(bbc_d4),
-		      .p81(bbc_a13),
-		      .p82(bbc_a12),
-		      .p83(bbc_a15),
+		      .p80(bbc_d7),
+		      .p81(bbc_d6),
+		      .p82(bbc_d5),
+		      .p83(bbc_d4),
 		      .p84(bbc_d3)                      
                       // RHS (upper)
 		      .p1(bbc_d2),
@@ -313,14 +326,14 @@ module l1b_mk2();
                     .a13(bbc_a13),
                     .a14(bbc_a14),
                     .a15(bbc_a15),
-                    .d7(bbc_d7),
-                    .d6(bbc_d6),
-                    .d5(bbc_d5),
-                    .d4(bbc_d4),
-                    .d3(bbc_d3),
-                    .d2(bbc_d2),
-                    .d1(bbc_d1),
-                    .d0(bbc_d0),
+                    .d7(bbc_dd7),
+                    .d6(bbc_dd6),
+                    .d5(bbc_dd5),
+                    .d4(bbc_dd4),
+                    .d3(bbc_dd3),
+                    .d2(bbc_dd2),
+                    .d1(bbc_dd1),
+                    .d0(bbc_dd0),
                     .rdnw(bbc_rnw),
                     .nc2(),
                     .nc3(),
@@ -330,12 +343,13 @@ module l1b_mk2();
                     .rstb(resetb)
                    );
 
-  hdr2x05   tstpt(
+  hdr2x06   tstpt(
                   .p1(GND),   .p2(GND),
-                  .p3(tp0), .p4(tp1),
-                  .p5(GND), .p6(GND),
-                  .p7(j0), .p8(j1),
-                  .p9(VDD),   .p10(VDD),
+                  .p3(tp0),   .p4(tp1),
+                  .p5(VDD),   .p6(VDD),
+                  .p7(VDD),   .p8(VDD),
+                  .p9(j0),    .p10(j1),
+                  .p11(GND),  .p12(GND),
                   );
 
   hdr1x02   tclk(
