@@ -76,9 +76,10 @@
   `define PAGED_ROM_SEL 16'hFE05
 `else
   `define PAGED_ROM_SEL 16'hFE30
-  // BBC B+ uses bit 7 of &FE34 for shadow RAM select
-  `define SHADOW_RAM_SEL 16'hFE34
 `endif
+
+// BBC B+ uses bit 7 of &FE34 for shadow RAM select
+`define SHADOW_RAM_SEL 16'hFE34
 
 `ifdef LAZY_REGISTER_DECODE
   `define PAGED_ROM_SELECTION ( {cpu_adr[15:2], 2'b0} == `PAGED_ROM_SEL)
