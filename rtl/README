@@ -4,9 +4,9 @@ design=level1b_mk2_m
 design=cpld_jnr
 
 if [ $# -lt 1 ]; then
-    design = level1b_mk2_m
+    design=level1b_mk2_m
 else
-    defines=$1
+    design=$1
 fi
 
 
