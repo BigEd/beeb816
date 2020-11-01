@@ -1,10 +1,6 @@
 `timescale 1ns / 1ns
 //
-// PCB hacks
-// 1. RAM_CEB and RAM_OEB separated
-//    RAM_OEB connected now to GPIO0 (ie pin is still marked GPIO0 on the original mk2 PCB)
-// 2. PCB Hack 2
-//    RAM_ADR14,15 connected to GPIO1,2
+// Option2 PCB Respin - main CPLD code
 //
 // Interrupts are not handled in '816 mode so leave this undefined for now
 //`ifdef REMAP_NATIVE_INTERRUPTS_D
@@ -35,12 +31,13 @@
 //`define CACHED_SHADOW_RAM 1
 //`define DIRECT_DRIVE_A13_A8
 //`define NO_SELECT_FLOPS 1
-
-// Define this so that *TURBO enables both MOS and APPs ROMs 
+`define WRITE_PROTECT_REMAPPED_ROM 1
+//
+// Define this so that *TURBO enables both MOS and APPs ROMs
 `define UNIFY_ROM_REMAP_BITS 1
-
-// Define this for lazy decoding of bottom two bits in ROM paging, shadow RAM selection
-// `define LAZY_REGISTER_DECODE 1
+//
+// Define this to delay the BBC_RNW low going edge by 2 inverter delays
+`define DELAY_RNW_LOW  1
 
 `define MAP_CC_DATA_SZ         8
 `define SHADOW_MEM_IDX         7
@@ -54,7 +51,6 @@
 `define CLK_CPUCLK_DIV_IDX_HI  1
 `define CLK_CPUCLK_DIV_IDX_LO  0
 `define BBC_PAGEREG_SZ         4    // only the bottom four ROM selection bits
-`define GPIO_SZ                3
 
 `ifdef MASTER_SHADOW_CTRL
 `define CPLD_REG_SEL_SZ        3
@@ -65,18 +61,18 @@
 `define CPLD_REG_SEL_MAP_CC_IDX 1
 `define CPLD_REG_SEL_BBC_PAGEREG_IDX 0
 
-`define PAGED_ROM_SEL 16'hFE30
-// BBC B+ uses bit 7 of &FE34 for shadow RAM select
-`define SHADOW_RAM_SEL 16'hFE34
-
-`ifdef LAZY_REGISTER_DECODE
-  `define PAGED_ROM_SELECTION ( {cpu_adr[15:2], 2'b0} == `PAGED_ROM_SEL)
-  `define SHADOW_RAM_SELECTION ( {cpu_adr[15:2], 2'b0} == `SHADOW_RAM_SEL) 
+// Address of ROM selection reg in BBC memory map
+`ifdef ELECTRON
+  `define PAGED_ROM_SEL 16'hFE05
 `else
-  // Default to full decode for the BBC B - seems unreliable otherwise although the Master seems ok with it
-  `define PAGED_ROM_SELECTION (cpu_adr== `PAGED_ROM_SEL)
-  `define SHADOW_RAM_SELECTION (cpu_adr== `SHADOW_RAM_SEL)
+  `define PAGED_ROM_SEL 16'hFE30
+  // BBC B+ uses bit 7 of &FE34 for shadow RAM select
+  `define SHADOW_RAM_SEL 16'hFE34
 `endif
+
+`define PAGED_ROM_SELECTION  dec_rom_reg
+`define SHADOW_RAM_SELECTION dec_ram_reg
+
 
 module level1b_mk2_m (
                       input [15:0]         cpu_adr,
@@ -88,9 +84,13 @@ module level1b_mk2_m (
                       input                bbc_phi0,
                       input                hsclk,
                       input                cpu_rnw,
+                      input [1:0]          j,
+                      input [1:0]          tp,
+                      input                dec_shadow_reg,
+                      input                dec_rom_reg,
+                      input                dec_fe4x,
                       inout [7:0]          cpu_data,
                       inout [7:0]          bbc_data,
-                      inout [`GPIO_SZ-1:0] gpio,
                       input                rdy,
                       inout                nmib,
                       inout                irqb,
@@ -98,11 +98,9 @@ module level1b_mk2_m (
                       output               ram_web,
                       output               ram_ceb,
                       output               ram_oeb,
-                      output               ram_adr18,
-                      output               ram_adr17,
-                      output               ram_adr16,
+                      output [18:14]       ram_adr,
                       output               bbc_sync,
-                      output [15:8]        bbc_adr,
+                      output [15:12]       bbc_adr,
                       output               bbc_rnw,
                       output               bbc_phi1,
                       output               bbc_phi2,
@@ -113,7 +111,9 @@ module level1b_mk2_m (
   reg [7:0]                            cpu_data_r;
   reg                                  mos_vdu_sync_q;
   reg                                  himem_vram_wr_lat_q;
+`ifdef WRITE_PROTECT_REMAPPED_ROM
   reg                                  rom_wr_protect_lat_q;
+`endif
 `ifdef USE_DATA_LATCHES_BBC2CPU
   reg [7:0]                            bbc_data_lat_q;
 `endif
@@ -122,7 +122,7 @@ module level1b_mk2_m (
 `endif
 // Only need to define latches for bits [13:8], since a15, a14 are handled separately and 7:0 are external to CPLD
 `ifdef USE_ADR_LATCHES_CPU2BBC
-  reg [5:0]                            cpu_adr_lat_q;
+  reg [1:0]                            cpu_adr_lat_q;
 `endif
   // This is the internal register controlling which features like high speed clocks etc are enabled
 `ifndef NO_SELECT_FLOPS
@@ -147,7 +147,7 @@ module level1b_mk2_m (
   wire                                 io_access_pipe_d;
 
   wire                                 himem_vram_wr_d;
-  wire                                 cpu_phi1_w;
+  (* KEEP="TRUE" *) wire               cpu_phi1_w;
   wire                                 cpu_phi2_w;
   wire                                 hs_selected_w;
   wire                                 ls_selected_w;
@@ -163,6 +163,8 @@ module level1b_mk2_m (
   (* KEEP="TRUE" *) wire ckdel_2;
   INV    ckdel1   ( .I(bbc_phi0), .O(ckdel_1_b));
   INV    ckdel2   ( .I(ckdel_1_b),    .O(ckdel_2));
+
+
   clkctrl_phi2 U_0 (
                     .hsclk_in(hsclk),
                     .lsclk_in(ckdel_1_b),
@@ -173,6 +175,7 @@ module level1b_mk2_m (
                     .lsclk_selected(ls_selected_w),
                     .clkout(cpu_phi1_w)
                     );
+
   assign bbc_phi1 = ckdel_1_b;
   assign bbc_phi2 = ckdel_2;
 
@@ -191,26 +194,27 @@ module level1b_mk2_m (
 `endif
 
   // Drive the all RAM address pins, allowing for 512K RAM connection
-  assign ram_adr16 = cpu_hiaddr_lat_q[0] ;
-  assign ram_adr17 = cpu_hiaddr_lat_q[1] ;
-  assign ram_adr18 = cpu_hiaddr_lat_q[2] ;
-  // Override address bits A14/A15 when accessing remapped ROMs
-  assign gpio[2] = cpu_a15_lat_q;
-  assign gpio[1] = cpu_a14_lat_q;
+  assign ram_adr = { cpu_hiaddr_lat_q[2:0], cpu_a15_lat_q, cpu_a14_lat_q } ;
   assign lat_en = !dummy_access_w;
 
 `ifdef ASSERT_RAMCEB_IN_PHI2
   // All addresses starting 0b11 go to the on-board RAM and 0b10 to IO space, so check just bit 6
   assign ram_ceb = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa) & cpu_phi2_w) ;
-  // PCB Hack 1 - gpio[0] = ram_oeb
-  assign gpio[0] = cpu_phi1_w;
+  assign ram_oeb = cpu_phi1_w;
+`ifdef WRITE_PROTECT_REMAPPED_ROM
   assign ram_web = cpu_rnw | rom_wr_protect_lat_q ;
+`else
+  assign ram_web = cpu_rnw ;
+`endif
 `else
   // All addresses starting 0b11 go to the on-board RAM and 0b10 to IO space, so check just bit 6
   assign ram_ceb = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa)) ;
-  // PCB Hack 1 - gpio[0] = ram_oeb
-  assign gpio[0] = cpu_phi1_w ;
-  assign ram_web = cpu_rnw | cpu_phi1_w | rom_wr_protect_lat_q ;
+  assign ram_oeb = cpu_phi1_w ;
+`ifdef WRITE_PROTECT_REMAPPED_ROM
+  assign ram_web = cpu_rnw | cpu_phi1_w | rom_wr_protect_lat_q;
+`else
+  assign ram_web = cpu_rnw | cpu_phi1_w;
+`endif
 `endif
 
   // All addresses starting with 0b10 go to internal IO registers which update on the
@@ -228,7 +232,6 @@ module level1b_mk2_m (
   assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = (cpu_data[7]== 1'b0) && `PAGED_ROM_SELECTION ;
 `ifdef MASTER_SHADOW_CTRL
   assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_SHADOW_IDX] = (cpu_data[7]== 1'b0) && `SHADOW_RAM_SELECTION ;
-  
 `endif
 `endif
 
@@ -237,13 +240,24 @@ module level1b_mk2_m (
   assign bbc_adr = { ( (dummy_access_w) ? 2'b10 : { cpu_a15_lat_q, cpu_a14_lat_q}), cpu_adr_lat_q };
 `else
 `ifdef DIRECT_DRIVE_A13_A8
-  assign bbc_adr = { ((dummy_access_w) ? 2'b10 : cpu_adr[15:14]), cpu_adr[13:8]};
+  assign bbc_adr = { ((dummy_access_w) ? 2'b10 : cpu_adr[15:14]), cpu_adr[13:12]};
 `else
-  assign bbc_adr = { (dummy_access_w) ? 8'h80 : cpu_adr[15:8] };
+  assign bbc_adr = { (dummy_access_w) ? 4'b1000 : cpu_adr[15:8] };
 `endif
 `endif
 
+`ifdef DELAY_RNW_LOW
+  (* KEEP="TRUE" *) wire bbc_rnw_pre, bbc_rnw_b, bbc_rnw_del,bbc_rnw_b2, bbc_rnw_del2;
+  assign bbc_rnw_pre = cpu_rnw | dummy_access_w ;
+  INV    bbc_rnw_0( .I(bbc_rnw_pre), .O(bbc_rnw_b) );
+  INV    bbc_rnw_1( .I(bbc_rnw_b), .O(bbc_rnw_del) );
+  INV    bbc_rnw_2( .I(bbc_rnw_del), .O(bbc_rnw_b2) );
+  INV    bbc_rnw_3( .I(bbc_rnw_b2), .O(bbc_rnw_del2) );
+  assign bbc_rnw = bbc_rnw_del2 | bbc_rnw_pre;
+`else
   assign bbc_rnw = cpu_rnw | dummy_access_w ;
+`endif
+
 `ifdef USE_DATA_LATCHES_CPU2BBC
   assign bbc_data = ( !bbc_rnw & bbc_phi2) ? cpu_data_lat_q : { 8{1'bz}};
 `else
@@ -251,25 +265,24 @@ module level1b_mk2_m (
 `endif
   assign cpu_data = cpu_data_r;
 
-`ifdef CACHED_SHADOW_RAM
-  // Simpler decoding but less performance if we make the shadow and VRAM options behave the same way by
-  // using fast reads but slow writes
-  assign himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | (cpu_adr[13]&cpu_adr[12]))  & !cpu_rnw  ;
-`else
-  // In shadow mode video memory is never remapped so don't mark any of RAM for slow down
-  // In non-shadow mode, cache video RAM accesses instead and mark VRAM writes for slow speed (0x3000-0x7FFF)
-  assign himem_vram_wr_d = !map_data_q[`SHADOW_MEM_IDX] & !cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | (cpu_adr[13]&cpu_adr[12]))  & !cpu_rnw  ;
-`endif
+  // Identify Video RAM so that in non shadow mode VRAM writes can be slowed down
+  assign himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | (cpu_adr[13]&cpu_adr[12]))  ;
 
   // Check for write accesses to some of IO space (FE4x) in case we need to delay switching back to HS clock
   // so that min pulse widths to sound chip/reading IO are respected
-  assign io_access_pipe_d = !cpu_hiaddr_lat_q[7] & (cpu_adr[15:4]==12'hFE4) & cpu_vda ;
+  assign io_access_pipe_d = !cpu_hiaddr_lat_q[7] & dec_fe4x & cpu_vda ;
 
   // Sel the high speed clock only
   // * on valid instruction fetches from himem, or
   // * on valid imm/data fetches from himem _if_ hs clock is already selected, or
   // * on invalid bus cycles if hs clock is already selected
-  assign himem_w =  cpu_hiaddr_lat_q[7] & !himem_vram_wr_lat_q;
+  //
+  // Option cached_shadow_ram can simplify the logic at the cost of making shadow and VRAM accesses both fast read/slow write
+`ifdef CACHED_SHADOW_RAM
+  assign himem_w =  (cpu_vpa|cpu_vda) & cpu_hiaddr_lat_q[7] & (!himem_vram_wr_lat_q | cpu_rnw );
+`else
+  assign himem_w =  (cpu_vpa|cpu_vda) & cpu_hiaddr_lat_q[7] & (!himem_vram_wr_lat_q | cpu_rnw | map_data_q[`SHADOW_MEM_IDX]);
+`endif
   assign hisync_w = (cpu_vpa&cpu_vda) & cpu_hiaddr_lat_q[7];
   assign sel_hs_w = map_data_q[`MAP_HSCLK_EN_IDX] & (( hisync_w & !io_access_pipe_q[0] ) |
                                                      ( himem_w & hs_selected_w) |
@@ -433,7 +446,9 @@ module level1b_mk2_m (
         cpu_a15_lat_q <= cpu_a15_lat_d;
         cpu_a14_lat_q <= cpu_a14_lat_d;
         himem_vram_wr_lat_q <= himem_vram_wr_d;
+`ifdef WRITE_PROTECT_REMAPPED_ROM
         rom_wr_protect_lat_q <= remapped_mos_access_r|remapped_romCF_access_r ;
+`endif
       end
 
 `ifdef USE_DATA_LATCHES_BBC2CPU
@@ -452,7 +467,7 @@ module level1b_mk2_m (
 `ifdef USE_ADR_LATCHES_CPU2BBC
   always @ ( * )
     if ( cpu_phi1_w )
-      cpu_adr_lat_q <= cpu_adr[13:8];
+      cpu_adr_lat_q <= cpu_adr[13:12];
 `endif
 
 
