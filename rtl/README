@@ -1,18 +1,23 @@
 #!/bin/bash
-# ./README [xc9572|xc95108] [$defines]
+# ./README [design ] [xc9572|xc95108]
 design=level1b_mk2_m
+design=cpld_jnr
 
 if [ $# -lt 1 ]; then
-    target=xc95108-15-pc84
+    design = level1b_mk2_m
 else
-    target=$1
+    defines=$1
 fi
 
+
 if [ $# -lt 2 ]; then
-    defines=""
+    target=xc95108-15-pc84
 else
-    defines=$2
+    target=$2
 fi
+
+defines=""
+
 
 echo "Building for $target"
 
