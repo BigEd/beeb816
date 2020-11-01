@@ -35,16 +35,16 @@
 //`define CACHED_SHADOW_RAM 1
 //`define DIRECT_DRIVE_A13_A8
 //`define NO_SELECT_FLOPS 1
-
+`define WRITE_PROTECT_REMAPPED_ROM 1
+//
 // Define this so that *TURBO enables both MOS and APPs ROMs
 `define UNIFY_ROM_REMAP_BITS 1
-
+//
 // Define this for lazy decoding of bottom two bits in ROM paging, shadow RAM selection
-// `define LAZY_REGISTER_DECODE 1
-
+//`define LAZY_REGISTER_DECODE 1
+//
 // Define this to delay the BBC_RNW low going edge by 2 inverter delays
-// `define DELAY_RNW_LOW  1
-
+`define DELAY_RNW_LOW  1
 
 `define MAP_CC_DATA_SZ         8
 `define SHADOW_MEM_IDX         7
@@ -69,9 +69,14 @@
 `define CPLD_REG_SEL_MAP_CC_IDX 1
 `define CPLD_REG_SEL_BBC_PAGEREG_IDX 0
 
-`define PAGED_ROM_SEL 16'hFE30
-// BBC B+ uses bit 7 of &FE34 for shadow RAM select
-`define SHADOW_RAM_SEL 16'hFE34
+// Address of ROM selection reg in BBC memory map
+`ifdef ELECTRON
+  `define PAGED_ROM_SEL 16'hFE05
+`else
+  `define PAGED_ROM_SEL 16'hFE30
+  // BBC B+ uses bit 7 of &FE34 for shadow RAM select
+  `define SHADOW_RAM_SEL 16'hFE34
+`endif
 
 `ifdef LAZY_REGISTER_DECODE
   `define PAGED_ROM_SELECTION ( {cpu_adr[15:2], 2'b0} == `PAGED_ROM_SEL)
@@ -117,7 +122,9 @@ module level1b_mk2_m (
   reg [7:0]                            cpu_data_r;
   reg                                  mos_vdu_sync_q;
   reg                                  himem_vram_wr_lat_q;
+`ifdef WRITE_PROTECT_REMAPPED_ROM
   reg                                  rom_wr_protect_lat_q;
+`endif
 `ifdef USE_DATA_LATCHES_BBC2CPU
   reg [7:0]                            bbc_data_lat_q;
 `endif
@@ -167,6 +174,8 @@ module level1b_mk2_m (
   (* KEEP="TRUE" *) wire ckdel_2;
   INV    ckdel1   ( .I(bbc_phi0), .O(ckdel_1_b));
   INV    ckdel2   ( .I(ckdel_1_b),    .O(ckdel_2));
+
+
   clkctrl_phi2 U_0 (
                     .hsclk_in(hsclk),
                     .lsclk_in(ckdel_1_b),
@@ -177,6 +186,7 @@ module level1b_mk2_m (
                     .lsclk_selected(ls_selected_w),
                     .clkout(cpu_phi1_w)
                     );
+
   assign bbc_phi1 = ckdel_1_b;
   assign bbc_phi2 = ckdel_2;
 
@@ -203,18 +213,31 @@ module level1b_mk2_m (
   assign gpio[1] = cpu_a14_lat_q;
   assign lat_en = !dummy_access_w;
 
+//  // Bring some signals out to probe points
+//  assign gpio[3] = bbc_rnw;
+//  assign gpio[4] = bbc_phi2;
+//  assign gpio[5] = cpu_rnw;
+
 `ifdef ASSERT_RAMCEB_IN_PHI2
   // All addresses starting 0b11 go to the on-board RAM and 0b10 to IO space, so check just bit 6
   assign ram_ceb = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa) & cpu_phi2_w) ;
   // PCB Hack 1 - gpio[0] = ram_oeb
   assign gpio[0] = cpu_phi1_w;
+`ifdef WRITE_PROTECT_REMAPPED_ROM
   assign ram_web = cpu_rnw | rom_wr_protect_lat_q ;
+`else
+  assign ram_web = cpu_rnw ;
+`endif
 `else
   // All addresses starting 0b11 go to the on-board RAM and 0b10 to IO space, so check just bit 6
   assign ram_ceb = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa)) ;
   // PCB Hack 1 - gpio[0] = ram_oeb
   assign gpio[0] = cpu_phi1_w ;
-  assign ram_web = cpu_rnw | cpu_phi1_w | rom_wr_protect_lat_q ;
+`ifdef WRITE_PROTECT_REMAPPED_ROM
+  assign ram_web = cpu_rnw | cpu_phi1_w | rom_wr_protect_lat_q;
+`else
+  assign ram_web = cpu_rnw | cpu_phi1_w;
+`endif
 `endif
 
   // All addresses starting with 0b10 go to internal IO registers which update on the
@@ -232,7 +255,6 @@ module level1b_mk2_m (
   assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = (cpu_data[7]== 1'b0) && `PAGED_ROM_SELECTION ;
 `ifdef MASTER_SHADOW_CTRL
   assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_SHADOW_IDX] = (cpu_data[7]== 1'b0) && `SHADOW_RAM_SELECTION ;
-
 `endif
 `endif
 
@@ -248,11 +270,13 @@ module level1b_mk2_m (
 `endif
 
 `ifdef DELAY_RNW_LOW
-  (* KEEP="TRUE" *) wire bbc_rnw_pre, bbc_rnw_b, bbc_rnw_del;
+  (* KEEP="TRUE" *) wire bbc_rnw_pre, bbc_rnw_b, bbc_rnw_del,bbc_rnw_b2, bbc_rnw_del2;
   assign bbc_rnw_pre = cpu_rnw | dummy_access_w ;
   INV    bbc_rnw_0( .I(bbc_rnw_pre), .O(bbc_rnw_b) );
   INV    bbc_rnw_1( .I(bbc_rnw_b), .O(bbc_rnw_del) );
-  assign bbc_rnw = bbc_rnw_del | bbc_rnw_pre;
+  INV    bbc_rnw_2( .I(bbc_rnw_del), .O(bbc_rnw_b2) );
+  INV    bbc_rnw_3( .I(bbc_rnw_b2), .O(bbc_rnw_del2) );
+  assign bbc_rnw = bbc_rnw_del2 | bbc_rnw_pre;
 `else
   assign bbc_rnw = cpu_rnw | dummy_access_w ;
 `endif
@@ -445,7 +469,9 @@ module level1b_mk2_m (
         cpu_a15_lat_q <= cpu_a15_lat_d;
         cpu_a14_lat_q <= cpu_a14_lat_d;
         himem_vram_wr_lat_q <= himem_vram_wr_d;
+`ifdef WRITE_PROTECT_REMAPPED_ROM
         rom_wr_protect_lat_q <= remapped_mos_access_r|remapped_romCF_access_r ;
+`endif
       end
 
 `ifdef USE_DATA_LATCHES_BBC2CPU
