@@ -45,6 +45,8 @@
 //
 // Define this to delay the BBC_RNW low going edge by 2 inverter delays
 `define DELAY_RNW_LOW  1
+// Define this to bring out some signals to GPIO probe points
+//`define ENABLE_PROBE_POINTS 1
 
 `define MAP_CC_DATA_SZ         8
 `define SHADOW_MEM_IDX         7
@@ -58,7 +60,7 @@
 `define CLK_CPUCLK_DIV_IDX_HI  1
 `define CLK_CPUCLK_DIV_IDX_LO  0
 `define BBC_PAGEREG_SZ         4    // only the bottom four ROM selection bits
-`define GPIO_SZ                3
+`define GPIO_SZ                6
 
 `ifdef MASTER_SHADOW_CTRL
 `define CPLD_REG_SEL_SZ        3
@@ -158,7 +160,7 @@ module level1b_mk2_m (
   wire                                 io_access_pipe_d;
 
   wire                                 himem_vram_wr_d;
-  wire                                 cpu_phi1_w;
+  (* KEEP="TRUE" *) wire                                 cpu_phi1_w;
   wire                                 cpu_phi2_w;
   wire                                 hs_selected_w;
   wire                                 ls_selected_w;
@@ -213,10 +215,11 @@ module level1b_mk2_m (
   assign gpio[1] = cpu_a14_lat_q;
   assign lat_en = !dummy_access_w;
 
-//  // Bring some signals out to probe points
-//  assign gpio[3] = bbc_rnw;
-//  assign gpio[4] = bbc_phi2;
-//  assign gpio[5] = cpu_rnw;
+`ifdef ENABLE_PROBE_POINTS
+  // Bring some signals out to probe points
+  assign gpio[3] = bbc_rnw;
+  assign gpio[4] = bbc_phi2;
+`endif
 
 `ifdef ASSERT_RAMCEB_IN_PHI2
   // All addresses starting 0b11 go to the on-board RAM and 0b10 to IO space, so check just bit 6
