@@ -42,6 +42,10 @@
 // Define this for lazy decoding of bottom two bits in ROM paging, shadow RAM selection
 // `define LAZY_REGISTER_DECODE 1
 
+// Define this to delay the BBC_RNW low going edge by 2 inverter delays
+// `define DELAY_RNW_LOW  1
+
+
 `define MAP_CC_DATA_SZ         8
 `define SHADOW_MEM_IDX         7
 `define MAP_ROM_IDX            4
@@ -243,7 +247,16 @@ module level1b_mk2_m (
 `endif
 `endif
 
+`ifdef DELAY_RNW_LOW
+  (* KEEP="TRUE" *) wire bbc_rnw_pre, bbc_rnw_b, bbc_rnw_del;
+  assign bbc_rnw_pre = cpu_rnw | dummy_access_w ;
+  INV    bbc_rnw_0( .I(bbc_rnw_pre), .O(bbc_rnw_b) );
+  INV    bbc_rnw_1( .I(bbc_rnw_b), .O(bbc_rnw_del) );
+  assign bbc_rnw = bbc_rnw_del | bbc_rnw_pre;
+`else
   assign bbc_rnw = cpu_rnw | dummy_access_w ;
+`endif
+
 `ifdef USE_DATA_LATCHES_CPU2BBC
   assign bbc_data = ( !bbc_rnw & bbc_phi2) ? cpu_data_lat_q : { 8{1'bz}};
 `else
