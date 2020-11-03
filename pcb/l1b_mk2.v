@@ -33,7 +33,7 @@ module l1b_mk2();
   wire     rdy, bbc_sync;
   wire     bbc_phi0, bbc_phi1, bbc_phi2, hsclk, cpu_phi2;
   wire     tdo, tdi, tck, tms, tdi_int;
-  wire     bbc_phi0_filt;  
+  wire     phi0, bbc_phi0_filt;  
   wire     j0, j1;
   wire     tp0, tp1;
   wire     dec_fe4x;
@@ -165,7 +165,7 @@ module l1b_mk2();
 		      .p6(bbc_phi1),
 		      .p7(tp0),
 		      .gnd1(GND),
-		      .gck1(bbc_phi0_filt),
+		      .gck1(phi0),
 		      .gck2(hsclk),
 		      .p11(tp1),
 
@@ -353,9 +353,14 @@ module l1b_mk2();
                   );
 
   hdr1x02   tclk(
-                 .p1(bbc_phi0_filt),
+                 .p1(phi0),
                  .p2(GND)
                  );
+  hdr1x03   clklnk (
+                    .p1(bbc_phi0_filt),
+                    .p2(phi0),
+                    .p3(bbc_phi0)
+                    );
   
   
 
