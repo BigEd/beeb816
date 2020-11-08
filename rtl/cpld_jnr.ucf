@@ -1,11 +1,11 @@
 # Pin Assignments to match PCB netlist
-PIN "dec_fe4x"	      LOC = P1 ;
-PIN "dec_shadow_reg"  LOC = P2 ;
+PIN "dec_fe4x"	    LOC = P1 ;
+PIN "cpu_adr[15]"   LOC = P2 ;
 PIN "dec_rom_reg"   LOC = P3 ;
-PIN "lat_en"	    LOC = P4 ;
-PIN "cpu_adr[15]"   LOC = P5 ; # GCK1
+PIN "cpu_adr[13]"   LOC = P4 ;
+PIN "dec_shadow_reg" LOC = P5 ; # GCK1
 PIN "cpu_adr[14]"   LOC = P6 ; # GCK2
-PIN "cpu_adr[13]"   LOC = P7 ; # GCK3
+PIN "lat_en"        LOC = P7 ; # GCK3
 PIN "cpu_adr[12]"   LOC = P8 ;
 PIN "cpu_adr[11]"   LOC = P9 ;
 PIN "cpu_adr[10]"   LOC = P11 ;

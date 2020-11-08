@@ -28,48 +28,50 @@ ROTATE =R270 CPLD ;
 ROTATE =R0   CPLD2 ;
 ROTATE =R270 CPU  ;
 ROTATE =R90  JTAG ;
+ROTATE =R180  TCLK ;
+
 ROTATE =R0   TSTPT ;
 ROTATE =R0   OSC  ;
 ROTATE =R270 SRAM ;
 
 ROTATE =R0   c47pf  ;
 ROTATE =R0   r100_1 ;
-ROTATE =R0   r47k ;
+ROTATE =R270 r47k ;
 
 MOVE C100N_1     ( 2.70 2.50 ) ;
-MOVE C100N_2     ( 1.30 2.50 ) ;
-MOVE C100N_3     ( 0.65 2.1 ) ;
-MOVE C100N_4     ( 3.25 0.65) ;
-MOVE C100N_5     ( 3.25 1.95) ;
-MOVE C100N_6     ( 2.25 0.85) ;
-MOVE C100N_10    ( 2.35 1.95) ;
+MOVE C100N_2     ( 1.2 2.50 ) ;
+MOVE C100N_3     ( 0.65 2.15 ) ;
+MOVE C100N_4     ( 3.25 0.25) ;
+MOVE C100N_5     ( 3.25 2.00) ;
+MOVE C100N_6     ( 2.25 0.65) ;
+MOVE C100N_10    ( 2.25 1.95) ;
 MOVE C100N_11    ( 2.65 1.55) ;
 MOVE C100N_12    ( 2.80 0.5) ;
 
 MOVE C22U_0      ( 0.2  3.05) ;
-MOVE CON         ( 3.65 1.50) ;
+MOVE CON         ( 3.70 1.60) ;
 MOVE CPLD        ( 2.50 1.75) ;
 MOVE CPLD2       ( 2.75 0.55) ;
 MOVE CPU         ( 1.25 1.4) ;
-MOVE TSTPT       ( 1.70 3.00) ;
+MOVE TSTPT       ( 1.35 3.00) ;
 MOVE JTAG        ( 0.2 2.50) ;
-MOVE OSC         ( 2.55 2.9) ;
+MOVE OSC         ( 2.5 2.9) ;
 MOVE SRAM        ( 0.45 1.2) ;
-MOV  CLKLNK      ( 3.2 2.8);
-MOV  TCLK        ( 3.25 2.6);
-MOVE c47pf       ( 3.2 3.05) ;
-MOVE r100_8      ( 3.55 3.05) ;
-MOV r47k         ( 0.80  3.05) ;
+MOV  CLKLNK      ( 3.35 2.8);
+MOV  TCLK        ( 3.30 2.55);
+MOVE c47pf       ( 3.20 3.05) ;
+MOVE r100_8      ( 3.45 3.05) ;
+MOV r47k         ( 0.75  2.45) ;
 
 # Databus resistors
-MOVE r100_0      (3.450 1.75);
-MOVE r100_1      (3.450 1.65);
-MOVE r100_2      (3.450 1.55);
-MOVE r100_3      (3.450 1.45);
-MOVE r100_4      (3.450 1.35);
-MOVE r100_5      (3.450 1.25);
-MOVE r100_6      (3.450 1.15);
-MOVE r100_7      (3.450 1.05);
+MOVE r100_0      (3.50 1.85);
+MOVE r100_1      (3.50 1.75);
+MOVE r100_2      (3.50 1.65);
+MOVE r100_3      (3.50 1.55);
+MOVE r100_4      (3.50 1.45);
+MOVE r100_5      (3.50 1.35);
+MOVE r100_6      (3.50 1.25);
+MOVE r100_7      (3.50 1.15);
 
 # SMD Caps on the back of the board
 MIRROR C100N_10;
@@ -88,18 +90,22 @@ Window Fit;
 
 # Preroute VDD and GND rings
 layer top;
-wire  0.030;
-wire  'VDD' (0.03 0.03) ( 3.88 0.03) (3.88 3.17) (0.03 3.17) (0.03 0.03);
+wire  0.024;
+wire  'VDD' (0.028 0.028) ( 3.89 0.028) (3.89 3.17) (0.028 3.17) (0.028 0.028);
+wire  0.025;
+wire  'VDD' (3.75 1.85) ( 3.88 1.85) ;
 wire  0.020;
-wire  'VDD' (3.70 1.75) ( 3.85 1.75) ;
+wire  'VDD' (1.30 2.5) ( 1.30 1.95) ( 1.55 1.95) ;
+wire  'VDD' (3.25 1.90) (3.25 0.35) ;
 
 layer bottom;
-wire  0.030;
-wire  'GND' (0.03 0.03) ( 3.88 0.03) (3.88 3.17) (0.03 3.17) (0.03 0.03);
+wire  0.025;
+wire  'GND' (0.03 0.03) ( 3.89 0.03) (3.89 3.17) (0.03 3.17) (0.03 0.03);
+wire 'GND' (1.55 0.38)  (0.03 0.38);
 wire  0.020;
+wire 'VDD' (2.95 1.20) ( 3.25 1.20);
+via  'VDD' 0.036 round (3.25 1.20); 
 
-## wire  0.020;
-## wire  'GND' (1.55 0.2) (1.55 0.03);
 
 # load autorouter params to get finer routing grid
 DRC load /tmp/design_rules.dru ;
@@ -108,10 +114,8 @@ AUTO
 
 ## Define power fills top and bottom over whole board area
 layer Top ;
-
 change Isolate 0.02 ;
 change Orphans Off ;
-
 polygon VDD 0.020  (0 0) (0 3.2) (3.92 3.2) (3.92 0) (0 0) ;
 layer Bottom ;
 polygon GND 0.020  (0 0) (0 3.2) (3.92 3.2) (3.92 0) (0 0) ;
@@ -132,12 +136,12 @@ CHANGE FONT FIXED ;
 CHANGE SIZE 0.03 ;
 CHANGE WIDTH 0.01 ;
 ## WIRE  (1.9 2.61) (1.9 2.75 ) (2.35 2.75 ) (2.35 2.61) (1.9 2.61 ) ;
-TEXT 'GND TDI TCK NC' R90 (0.35  2.3) ;
+TEXT 'GND TDI TCK NC' R90 (0.35 2.3) ;
 TEXT 'GND TMS TDO 5V' R90 (0.40 2.3) ;
 
 ## WIRE  (2.7 2.61) (2.7 2.75 ) (3.38 2.75 ) (3.38 2.61) (2.7 2.61 ) ;
-TEXT 'GND TP1 VDD VDD J1 GND' R0 (1.40 2.85) ;
-TEXT 'GND TP0 VDD VDD J0 GND' R0 (1.40 2.80) ;
+TEXT 'GND TP1 VDD  VDD J1 GND' R0 (1.05 2.85) ;
+TEXT 'GND TP0 VDD  VDD J0 GND' R0 (1.05 2.80) ;
 
 
 

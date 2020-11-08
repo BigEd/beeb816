@@ -36,4 +36,5 @@ jython ${NLIST_PATH}/src/netlister.py -i l1b_mk2.v \
     -l "${NLIST_PATH}/lib/switches.lib" \
     -l "${NLIST_PATH}/lib/idc_connectors.lib" \
     -o l1b_mk2.net \
+    -u \
     -f net
