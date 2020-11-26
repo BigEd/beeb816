@@ -147,7 +147,7 @@ module level1b_mk2_m (
   wire                                 io_access_pipe_d;
 
   wire                                 himem_vram_wr_d;
-  (* KEEP="TRUE" *) wire               cpu_phi1_w;
+  wire                                 cpu_phi1_w;
   wire                                 cpu_phi2_w;
   wire                                 hs_selected_w;
   wire                                 ls_selected_w;
@@ -242,7 +242,7 @@ module level1b_mk2_m (
 `ifdef DIRECT_DRIVE_A13_A8
   assign bbc_adr = { ((dummy_access_w) ? 2'b10 : cpu_adr[15:14]), cpu_adr[13:12]};
 `else
-  assign bbc_adr = { (dummy_access_w) ? 4'b1000 : cpu_adr[15:8] };
+  assign bbc_adr = { (dummy_access_w) ? 4'b1000 : cpu_adr[15:12] };
 `endif
 `endif
 
