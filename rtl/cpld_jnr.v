@@ -1,4 +1,5 @@
 `timescale 1ns / 1ns
+
 // Address of ROM selection reg in BBC memory map
 `ifdef ELECTRON
   `define PAGED_ROM_SEL 16'hFE05

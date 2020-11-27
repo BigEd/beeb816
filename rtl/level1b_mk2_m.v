@@ -39,6 +39,9 @@
 // Define this to delay the BBC_RNW low going edge by 2 inverter delays
 `define DELAY_RNW_LOW  1
 
+// Define this to force-keep some clock nets to reduce design size .. but cause slowdown in performance
+//`define FORCE_KEEP_CLOCK 1
+
 `define MAP_CC_DATA_SZ         8
 `define SHADOW_MEM_IDX         7
 `define MAP_ROM_IDX            4
@@ -147,8 +150,14 @@ module level1b_mk2_m (
   wire                                 io_access_pipe_d;
 
   wire                                 himem_vram_wr_d;
+
+`ifdef FORCE_KEEP_CLOCK
+  (* KEEP="TRUE" *) wire               cpu_phi1_w;
+  (* KEEP="TRUE" *) wire               cpu_phi2_w;
+`else
   wire                                 cpu_phi1_w;
   wire                                 cpu_phi2_w;
+`endif
   wire                                 hs_selected_w;
   wire                                 ls_selected_w;
   wire                                 dummy_access_w;
