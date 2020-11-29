@@ -7,7 +7,7 @@
 // Depth of pipeline to delay switches to HS clock after an IO access. Need more cycles for
 // faster clocks so ideally this should be linked with the divider setting. Over 16MHz needs
 // 5 cycles but 13.8MHz seems ok with 4.
-`define IO_ACCESS_DELAY_SZ     5
+`define IO_ACCESS_DELAY_SZ     6
 // Define this to get a clean deassertion/reassertion of RAM CEB but this limits some
 // setup time from CEB low to data valid etc. Not an issue in a board with a faster
 // SMD RAM so expect to set this in the final design, but omitting it can help with
@@ -41,6 +41,10 @@
 
 // Define this to force-keep some clock nets to reduce design size .. but cause slowdown in performance
 //`define FORCE_KEEP_CLOCK 1
+
+// Define to drive clocks to test points tp[1:0]
+`define OBSERVE_CLOCKS 1
+
 
 `define MAP_CC_DATA_SZ         8
 `define SHADOW_MEM_IDX         7
@@ -88,7 +92,7 @@ module level1b_mk2_m (
                       input                hsclk,
                       input                cpu_rnw,
                       input [1:0]          j,
-                      input [1:0]          tp,
+                      output [1:0]         tp,
                       input                dec_shadow_reg,
                       input                dec_rom_reg,
                       input                dec_fe4x,
@@ -170,8 +174,12 @@ module level1b_mk2_m (
   // Force keep intermediate nets to preserve strict delay chain for clocks
   (* KEEP="TRUE" *) wire ckdel_1_b;
   (* KEEP="TRUE" *) wire ckdel_2;
+  (* KEEP="TRUE" *) wire ckdel_3_b;
+  (* KEEP="TRUE" *) wire ckdel_4;
   INV    ckdel1   ( .I(bbc_phi0), .O(ckdel_1_b));
   INV    ckdel2   ( .I(ckdel_1_b),    .O(ckdel_2));
+  INV    ckdel3   ( .I(ckdel_2), .O(ckdel_3_b));
+  INV    ckdel4   ( .I(ckdel_3_b),    .O(ckdel_4));
 
 
   clkctrl_phi2 U_0 (
@@ -185,8 +193,8 @@ module level1b_mk2_m (
                     .clkout(cpu_phi1_w)
                     );
 
-  assign bbc_phi1 = ckdel_1_b;
-  assign bbc_phi2 = ckdel_2;
+  assign bbc_phi1 = ckdel_3_b;
+  assign bbc_phi2 = ckdel_4;
 
   assign cpu_phi2_w = !cpu_phi1_w ;
   assign cpu_phi2 =  cpu_phi2_w ;
@@ -195,6 +203,11 @@ module level1b_mk2_m (
   assign irqb = 1'bz;
   assign nmib = 1'bz;
 
+`ifdef OBSERVE_CLOCKS
+  assign tp = { bbc_phi1, cpu_phi2 };
+`endif  
+
+  
 `ifdef REMAP_NATIVE_INTERRUPTS_D
   // Native mode interrupts will be redirected to himem
   assign native_mode_int_w = !cpu_vpb & !cpu_e ;
