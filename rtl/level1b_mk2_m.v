@@ -12,7 +12,7 @@
 // setup time from CEB low to data valid etc. Not an issue in a board with a faster
 // SMD RAM so expect to set this in the final design, but omitting it can help with
 // speed in the proto
-//`define ASSERT_RAMCEB_IN_PHI2  1
+`define ASSERT_RAMCEB_IN_PHI2  1
 //
 // Define this for the Acorn Electron instead of BBC Micro
 // `define ELECTRON 1
@@ -44,6 +44,9 @@
 
 // Define to drive clocks to test points tp[1:0]
 `define OBSERVE_CLOCKS 1
+
+// Define new memory MAP - merging MOS/RAM bank with interrupt vectors and relocating MOS to &8000 in that bank
+`define NEW_MEMORY_MAP 1
 
 
 `define MAP_CC_DATA_SZ         8
@@ -180,8 +183,6 @@ module level1b_mk2_m (
   INV    ckdel2   ( .I(ckdel_1_b),    .O(ckdel_2));
   INV    ckdel3   ( .I(ckdel_2), .O(ckdel_3_b));
   INV    ckdel4   ( .I(ckdel_3_b),    .O(ckdel_4));
-
-
   clkctrl_phi2 U_0 (
                     .hsclk_in(hsclk),
                     .lsclk_in(ckdel_1_b),
@@ -195,7 +196,7 @@ module level1b_mk2_m (
 
   assign bbc_phi1 = ckdel_3_b;
   assign bbc_phi2 = ckdel_4;
-
+  
   assign cpu_phi2_w = !cpu_phi1_w ;
   assign cpu_phi2 =  cpu_phi2_w ;
 
@@ -222,7 +223,7 @@ module level1b_mk2_m (
 `ifdef ASSERT_RAMCEB_IN_PHI2
   // All addresses starting 0b11 go to the on-board RAM and 0b10 to IO space, so check just bit 6
   assign ram_ceb = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa) & cpu_phi2_w) ;
-  assign ram_oeb = cpu_phi1_w;
+  assign ram_oeb = !cpu_rnw | cpu_phi1_w ;
 `ifdef WRITE_PROTECT_REMAPPED_ROM
   assign ram_web = cpu_rnw | rom_wr_protect_lat_q ;
 `else
@@ -231,7 +232,7 @@ module level1b_mk2_m (
 `else
   // All addresses starting 0b11 go to the on-board RAM and 0b10 to IO space, so check just bit 6
   assign ram_ceb = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa)) ;
-  assign ram_oeb = cpu_phi1_w ;
+  assign ram_oeb = !cpu_rnw | cpu_phi1_w ;
 `ifdef WRITE_PROTECT_REMAPPED_ROM
   assign ram_web = cpu_rnw | cpu_phi1_w | rom_wr_protect_lat_q;
 `else
@@ -348,6 +349,30 @@ module level1b_mk2_m (
     cpu_a14_lat_d = cpu_adr[14];
     cpu_hiaddr_lat_d = cpu_data;
 
+`ifdef NEW_MEMORY_MAP
+    // Native mode interrupts go to bank 0xFF (with other native 816 code)
+    if ( native_mode_int_w )
+      cpu_hiaddr_lat_d = 8'hFF;
+    // All remapped RAM/Mos accesses to 8'b1110x110
+    else if ( remapped_ram_access_r )
+      cpu_hiaddr_lat_d = 8'hFF;
+    else if (remapped_mos_access_r) begin
+      cpu_hiaddr_lat_d = 8'hFF;
+      cpu_a14_lat_d = 1'b0;
+    end    
+    // All remapped ROM slots 4-7 accesses to 8'b1110x100
+    else if (remapped_rom47_access_r) begin
+      cpu_hiaddr_lat_d = 8'hFD;
+      cpu_a15_lat_d = bbc_pagereg_q[1];
+      cpu_a14_lat_d = bbc_pagereg_q[0];
+    end
+    // All remapped ROM slots C-F accesses to 8'b1110x101
+    else if (remapped_romCF_access_r) begin
+      cpu_hiaddr_lat_d = 8'hFE;
+      cpu_a15_lat_d = bbc_pagereg_q[1];
+      cpu_a14_lat_d = bbc_pagereg_q[0];
+    end
+`else    
     // Native mode interrupts go to bank 0xFF (with other native 816 code)
     if ( native_mode_int_w )
       cpu_hiaddr_lat_d = 8'hFF;
@@ -366,7 +391,7 @@ module level1b_mk2_m (
       cpu_a15_lat_d = bbc_pagereg_q[1];
       cpu_a14_lat_d = bbc_pagereg_q[0];
     end
-
+`endif
   end
 
   // drive cpu data if we're reading internal register or making a non dummy read from lomem
