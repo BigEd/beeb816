@@ -11,12 +11,12 @@
 // Depth of pipeline to delay switches to HS clock after an IO access. Need more cycles for
 // faster clocks so ideally this should be linked with the divider setting. Over 16MHz needs
 // 5 cycles but 13.8MHz seems ok with 4.
-`define IO_ACCESS_DELAY_SZ     5
+`define IO_ACCESS_DELAY_SZ     4
 // Define this to get a clean deassertion/reassertion of RAM CEB but this limits some
 // setup time from CEB low to data valid etc. Not an issue in a board with a faster
 // SMD RAM so expect to set this in the final design, but omitting it can help with
 // speed in the proto
-//`define ASSERT_RAMCEB_IN_PHI2  1
+`define ASSERT_RAMCEB_IN_PHI2  1
 //
 // Define this for the Acorn Electron instead of BBC Micro
 // `define ELECTRON 1
@@ -35,7 +35,7 @@
 //`define CACHED_SHADOW_RAM 1
 //`define DIRECT_DRIVE_A13_A8
 //`define NO_SELECT_FLOPS 1
-`define WRITE_PROTECT_REMAPPED_ROM 1
+//`define WRITE_PROTECT_REMAPPED_ROM 1
 //
 // Define this so that *TURBO enables both MOS and APPs ROMs
 `define UNIFY_ROM_REMAP_BITS 1
@@ -47,6 +47,10 @@
 `define DELAY_RNW_LOW  1
 // Define this to bring out some signals to GPIO probe points
 //`define ENABLE_PROBE_POINTS 1
+
+// Define new memory MAP - merging MOS/RAM bank with interrupt vectors and relocating MOS to &8000 in that bank
+`define NEW_MEMORY_MAP 1
+
 
 `define MAP_CC_DATA_SZ         8
 `define SHADOW_MEM_IDX         7
@@ -353,6 +357,30 @@ module level1b_mk2_m (
     cpu_a14_lat_d = cpu_adr[14];
     cpu_hiaddr_lat_d = cpu_data;
 
+`ifdef NEW_MEMORY_MAP
+    // Native mode interrupts go to bank 0xFF (with other native 816 code)
+    if ( native_mode_int_w )
+      cpu_hiaddr_lat_d = 8'hFF;
+    // All remapped RAM/Mos accesses to 8'b1110x110
+    else if ( remapped_ram_access_r )
+      cpu_hiaddr_lat_d = 8'hFF;
+    else if (remapped_mos_access_r) begin
+      cpu_hiaddr_lat_d = 8'hFF;
+      cpu_a14_lat_d = 1'b0;
+    end    
+    // All remapped ROM slots 4-7 accesses to 8'b1110x100
+    else if (remapped_rom47_access_r) begin
+      cpu_hiaddr_lat_d = 8'hFD;
+      cpu_a15_lat_d = bbc_pagereg_q[1];
+      cpu_a14_lat_d = bbc_pagereg_q[0];
+    end
+    // All remapped ROM slots C-F accesses to 8'b1110x101
+    else if (remapped_romCF_access_r) begin
+      cpu_hiaddr_lat_d = 8'hFE;
+      cpu_a15_lat_d = bbc_pagereg_q[1];
+      cpu_a14_lat_d = bbc_pagereg_q[0];
+    end
+`else    
     // Native mode interrupts go to bank 0xFF (with other native 816 code)
     if ( native_mode_int_w )
       cpu_hiaddr_lat_d = 8'hFF;
@@ -371,7 +399,7 @@ module level1b_mk2_m (
       cpu_a15_lat_d = bbc_pagereg_q[1];
       cpu_a14_lat_d = bbc_pagereg_q[0];
     end
-
+`endif
   end
 
   // drive cpu data if we're reading internal register or making a non dummy read from lomem
