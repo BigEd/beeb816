@@ -40,10 +40,10 @@
 `define DELAY_RNW_LOW  1
 
 // Define this to force-keep some clock nets to reduce design size .. but cause slowdown in performance
-//`define FORCE_KEEP_CLOCK 1
+`define FORCE_KEEP_CLOCK 1
 
 // Define to drive clocks to test points tp[1:0]
-`define OBSERVE_CLOCKS 1
+//`define OBSERVE_CLOCKS 1
 
 // Define new memory MAP - merging MOS/RAM bank with interrupt vectors and relocating MOS to &8000 in that bank
 `define NEW_MEMORY_MAP 1
@@ -155,7 +155,6 @@ module level1b_mk2_m (
   reg [7:0]                            cpu_hiaddr_lat_d;
   reg [ `IO_ACCESS_DELAY_SZ-1:0]       io_access_pipe_q;
   wire                                 io_access_pipe_d;
-
   wire                                 himem_vram_wr_d;
 
 `ifdef FORCE_KEEP_CLOCK
@@ -196,7 +195,7 @@ module level1b_mk2_m (
 
   assign bbc_phi1 = ckdel_3_b;
   assign bbc_phi2 = ckdel_4;
-  
+
   assign cpu_phi2_w = !cpu_phi1_w ;
   assign cpu_phi2 =  cpu_phi2_w ;
 
@@ -206,9 +205,9 @@ module level1b_mk2_m (
 
 `ifdef OBSERVE_CLOCKS
   assign tp = { bbc_phi1, cpu_phi2 };
-`endif  
+`endif
 
-  
+
 `ifdef REMAP_NATIVE_INTERRUPTS_D
   // Native mode interrupts will be redirected to himem
   assign native_mode_int_w = !cpu_vpb & !cpu_e ;
@@ -222,7 +221,7 @@ module level1b_mk2_m (
 
 `ifdef ASSERT_RAMCEB_IN_PHI2
   // All addresses starting 0b11 go to the on-board RAM and 0b10 to IO space, so check just bit 6
-  assign ram_ceb = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa) & cpu_phi2_w) ;
+  assign ram_ceb = cpu_phi1_w | !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa)) ;
   assign ram_oeb = !cpu_rnw | cpu_phi1_w ;
 `ifdef WRITE_PROTECT_REMAPPED_ROM
   assign ram_web = cpu_rnw | rom_wr_protect_lat_q ;
@@ -359,7 +358,7 @@ module level1b_mk2_m (
     else if (remapped_mos_access_r) begin
       cpu_hiaddr_lat_d = 8'hFF;
       cpu_a14_lat_d = 1'b0;
-    end    
+    end
     // All remapped ROM slots 4-7 accesses to 8'b1110x100
     else if (remapped_rom47_access_r) begin
       cpu_hiaddr_lat_d = 8'hFD;
@@ -372,7 +371,7 @@ module level1b_mk2_m (
       cpu_a15_lat_d = bbc_pagereg_q[1];
       cpu_a14_lat_d = bbc_pagereg_q[0];
     end
-`else    
+`else
     // Native mode interrupts go to bank 0xFF (with other native 816 code)
     if ( native_mode_int_w )
       cpu_hiaddr_lat_d = 8'hFF;
