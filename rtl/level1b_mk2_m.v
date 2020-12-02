@@ -45,9 +45,6 @@
 // Define to drive clocks to test points tp[1:0]
 //`define OBSERVE_CLOCKS 1
 
-// Define new memory MAP - merging MOS/RAM bank with interrupt vectors and relocating MOS to &8000 in that bank
-`define NEW_MEMORY_MAP 1
-
 
 `define MAP_CC_DATA_SZ         8
 `define SHADOW_MEM_IDX         7
@@ -348,7 +345,6 @@ module level1b_mk2_m (
     cpu_a14_lat_d = cpu_adr[14];
     cpu_hiaddr_lat_d = cpu_data;
 
-`ifdef NEW_MEMORY_MAP
     // Native mode interrupts go to bank 0xFF (with other native 816 code)
     if ( native_mode_int_w )
       cpu_hiaddr_lat_d = 8'hFF;
@@ -371,26 +367,6 @@ module level1b_mk2_m (
       cpu_a15_lat_d = bbc_pagereg_q[1];
       cpu_a14_lat_d = bbc_pagereg_q[0];
     end
-`else
-    // Native mode interrupts go to bank 0xFF (with other native 816 code)
-    if ( native_mode_int_w )
-      cpu_hiaddr_lat_d = 8'hFF;
-    // All remapped RAM/Mos accesses to 8'b1110x110
-    else if ( remapped_ram_access_r | remapped_mos_access_r)
-      cpu_hiaddr_lat_d = 8'hEE;
-    // All remapped ROM slots 4-7 accesses to 8'b1110x100
-    else if (remapped_rom47_access_r) begin
-      cpu_hiaddr_lat_d = 8'hEC;
-      cpu_a15_lat_d = bbc_pagereg_q[1];
-      cpu_a14_lat_d = bbc_pagereg_q[0];
-    end
-    // All remapped ROM slots C-F accesses to 8'b1110x101
-    else if (remapped_romCF_access_r) begin
-      cpu_hiaddr_lat_d = 8'hED;
-      cpu_a15_lat_d = bbc_pagereg_q[1];
-      cpu_a14_lat_d = bbc_pagereg_q[0];
-    end
-`endif
   end
 
   // drive cpu data if we're reading internal register or making a non dummy read from lomem
