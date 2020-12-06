@@ -332,10 +332,10 @@ module level1b_mk2_m (
   assign himem_w =  cpu_hiaddr_lat_q[7] & (!himem_vram_wr_lat_q | cpu_rnw | map_data_q[`SHADOW_MEM_IDX]);
 `endif
   assign hisync_w = (cpu_vpa&cpu_vda) & cpu_hiaddr_lat_q[7];
-  assign sel_hs_w = map_data_q[`MAP_HSCLK_EN_IDX] & (( hisync_w & !io_access_pipe_q[0] ) |
-                                                     ( himem_w & hs_selected_w) |
-                                                     (!cpu_vpa & !cpu_vda & hs_selected_w)
-                                                     ) ;
+  assign sel_hs_w = (( hisync_w & !io_access_pipe_q[0] ) |
+                     ( himem_w & hs_selected_w) |
+                     (!cpu_vpa & !cpu_vda & hs_selected_w)
+                     ) ;
 
   assign dummy_access_w =  himem_w | !ls_selected_w ;
 
@@ -466,12 +466,20 @@ module level1b_mk2_m (
 
 
   // Short pipeline to delay switching back to hs clock after an IO access to ensure any instruction
-  // timed delays are respected.
-  always @ ( negedge cpu_phi2_w )
-    if (io_access_pipe_d)
+  // timed delays are respected. This pipeline is initialised to all 1's for force slow clock on startup
+  // and will fill with the value of the HS clock enable register as instructions are executed.
+  always @ ( negedge cpu_phi2_w or negedge resetb) begin
+    if ( !resetb )
       io_access_pipe_q <= {`IO_ACCESS_DELAY_SZ{1'b1}};
-    else if ( cpu_vpa & cpu_vda & rdy )
-      io_access_pipe_q <=  io_access_pipe_q >> 1 ;
+    else begin
+      if (io_access_pipe_d )
+        io_access_pipe_q <= {`IO_ACCESS_DELAY_SZ{1'b1}};
+      else if ( cpu_vpa & cpu_vda & rdy )
+        io_access_pipe_q <= { map_data_q[`MAP_HSCLK_EN_IDX], io_access_pipe_q[`IO_ACCESS_DELAY_SZ-2:1] } ;
+    end
+  end
+
+
 
   // Instruction was fetched from VDU routines in MOS if
   // - in the range EEC000 - EEDFFF (if remapped to himem)
