@@ -24,9 +24,6 @@
 `define USE_DATA_LATCHES_BBC2CPU 1
 //`define USE_DATA_LATCHES_CPU2BBC 1
 //
-// Put latches on adr bits 13..8 (already have explicit latches on 14 and 15)
-//`define USE_ADR_LATCHES_CPU2BBC 1
-//
 // Define this to use fast reads/slow writes to Shadow as with the VRAM to simplify decoding
 //`define CACHED_SHADOW_RAM 1
 //`define DIRECT_DRIVE_A13_A8
@@ -135,10 +132,6 @@ module level1b_mk2_m (
 `ifdef USE_DATA_LATCHES_CPU2BBC
   reg [7:0]                            cpu_data_lat_q;
 `endif
-// Only need to define latches for bits [13:8], since a15, a14 are handled separately and 7:0 are external to CPLD
-`ifdef USE_ADR_LATCHES_CPU2BBC
-  reg [1:0]                            cpu_adr_lat_q;
-`endif
   // This is the internal register controlling which features like high speed clocks etc are enabled
 `ifndef NO_SELECT_FLOPS
   reg [ `CPLD_REG_SEL_SZ-1:0]           cpld_reg_sel_q;
@@ -151,8 +144,6 @@ module level1b_mk2_m (
   reg                                  remapped_romCF_access_r ;
   reg                                  remapped_mos_access_r ;
   reg                                  remapped_ram_access_r ;
-  reg                                  romCF_selected_q;
-  reg                                  rom47_selected_q;
   reg                                  cpu_a15_lat_d;
   reg                                  cpu_a14_lat_d;
   reg                                  cpu_a15_lat_q;
@@ -293,14 +284,10 @@ module level1b_mk2_m (
 `endif
 
   // Force dummy read access when accessing himem explicitly but not for remapped RAM accesses which can still complete
-`ifdef USE_ADR_LATCHES_CPU2BBC
-  assign bbc_adr = { ( (dummy_access_w) ? 2'b10 : { cpu_a15_lat_q, cpu_a14_lat_q}), cpu_adr_lat_q };
-`else
 `ifdef DIRECT_DRIVE_A13_A8
   assign bbc_adr = { ((dummy_access_w) ? 2'b10 : cpu_adr[15:14]), cpu_adr[13:12]};
 `else
   assign bbc_adr = { (dummy_access_w) ? 4'b1000 : cpu_adr[15:12] };
-`endif
 `endif
 
 `ifdef DELAY_RNW_LOW
@@ -523,12 +510,5 @@ module level1b_mk2_m (
     if ( cpu_phi2_w )
       cpu_data_lat_q <= cpu_data;
 `endif
-
-`ifdef USE_ADR_LATCHES_CPU2BBC
-  always @ ( * )
-    if ( cpu_phi1_w )
-      cpu_adr_lat_q <= cpu_adr[13:12];
-`endif
-
 
 endmodule // level1b_m
