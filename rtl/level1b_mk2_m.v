@@ -45,6 +45,14 @@
 // Define to drive clocks to test points tp[1:0]
 //`define OBSERVE_CLOCKS 1
 
+// Define to delay falling edge of RAMOEB by one inverter
+//`define DELAY_RAMOEB_BY_1
+// Define to delay falling edge of RAMOEB by two inverters
+//`define DELAY_RAMOEB_BY_2
+// Define to delay falling edge of RAMOEB by three inverters
+//`define DELAY_RAMOEB_BY_3
+// Define to delay falling edge of RAMOEB by four inverters
+//`define DELAY_RAMOEB_BY_4
 
 `define MAP_CC_DATA_SZ         8
 `define SHADOW_MEM_IDX         7
@@ -216,10 +224,41 @@ module level1b_mk2_m (
   assign ram_adr = { cpu_hiaddr_lat_q[2:0], cpu_a15_lat_q, cpu_a14_lat_q } ;
   assign lat_en = !dummy_access_w;
 
+`ifdef DELAY_RAMOEB_BY_1
+  (* KEEP="TRUE" *) wire ramoedel_1_b;
+  INV    ramoedel1   ( .I(!cpu_rnw | cpu_phi1_w), .O(ramoedel_1_b));
+  assign ram_oeb = !cpu_rnw | cpu_phi1_w | !ramoedel_1_b;
+`elsif DELAY_RAMOEB_BY_2
+  (* KEEP="TRUE" *) wire ramoedel_1_b;
+  (* KEEP="TRUE" *) wire ramoedel_2;
+  INV    ramoedel1   ( .I(!cpu_rnw | cpu_phi1_w), .O(ramoedel_1_b));
+  INV    ramoedel2   ( .I(ramoedel_1_b),    .O(ramoedel_2));
+  assign ram_oeb = !cpu_rnw | cpu_phi1_w | ramoedel_2;
+`elsif DELAY_RAMOEB_BY_3
+  (* KEEP="TRUE" *) wire ramoedel_1_b;
+  (* KEEP="TRUE" *) wire ramoedel_2;
+  (* KEEP="TRUE" *) wire ramoedel_3_b;
+  INV    ramoedel1   ( .I(!cpu_rnw | cpu_phi1_w), .O(ramoedel_1_b));
+  INV    ramoedel2   ( .I(ramoedel_1_b),    .O(ramoedel_2));
+  INV    ramoedel3   ( .I(ramoedel_2), .O(ramoedel_3_b));
+  assign ram_oeb = !cpu_rnw | cpu_phi1_w | !ramoedel_3_b;
+`elsif DELAY_RAMOEB_BY_4
+  (* KEEP="TRUE" *) wire ramoedel_1_b;
+  (* KEEP="TRUE" *) wire ramoedel_2;
+  (* KEEP="TRUE" *) wire ramoedel_3_b;
+  (* KEEP="TRUE" *) wire ramoedel_4;
+  INV    ramoedel1   ( .I(!cpu_rnw | cpu_phi1_w), .O(ramoedel_1_b));
+  INV    ramoedel2   ( .I(ramoedel_1_b),    .O(ramoedel_2));
+  INV    ramoedel3   ( .I(ramoedel_2), .O(ramoedel_3_b));
+  INV    ramoedel4   ( .I(ramoedel_3_b),    .O(ramoedel_4));
+  assign ram_oeb = !cpu_rnw | cpu_phi1_w | ramoedel_4;
+`else
+  assign ram_oeb = !cpu_rnw | cpu_phi1_w ;
+`endif
+
 `ifdef ASSERT_RAMCEB_IN_PHI2
   // All addresses starting 0b11 go to the on-board RAM and 0b10 to IO space, so check just bit 6
   assign ram_ceb = cpu_phi1_w | !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa)) ;
-  assign ram_oeb = !cpu_rnw | cpu_phi1_w ;
 `ifdef WRITE_PROTECT_REMAPPED_ROM
   assign ram_web = cpu_rnw | rom_wr_protect_lat_q ;
 `else
@@ -228,7 +267,6 @@ module level1b_mk2_m (
 `else
   // All addresses starting 0b11 go to the on-board RAM and 0b10 to IO space, so check just bit 6
   assign ram_ceb = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa)) ;
-  assign ram_oeb = !cpu_rnw | cpu_phi1_w ;
 `ifdef WRITE_PROTECT_REMAPPED_ROM
   assign ram_web = cpu_rnw | cpu_phi1_w | rom_wr_protect_lat_q;
 `else
