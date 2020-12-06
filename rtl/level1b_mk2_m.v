@@ -6,8 +6,8 @@
 `define REMAP_NATIVE_INTERRUPTS_D 1
 // Depth of pipeline to delay switches to HS clock after an IO access. Need more cycles for
 // faster clocks so ideally this should be linked with the divider setting. Over 16MHz needs
-// 5 cycles but 13.8MHz seems ok with 4.
-`define IO_ACCESS_DELAY_SZ     6
+// 5 cycles but 13.8MHz seems ok with 4. Modified now to count SYNCs rather than cycles
+`define IO_ACCESS_DELAY_SZ     3
 // Define this to get a clean deassertion/reassertion of RAM CEB but this limits some
 // setup time from CEB low to data valid etc. Not an issue in a board with a faster
 // SMD RAM so expect to set this in the final design, but omitting it can help with
@@ -42,10 +42,14 @@
 // Define to drive clocks to test points tp[1:0]
 //`define OBSERVE_CLOCKS 1
 
+// Define this to disable (and optimize out) Shadow RAM operation - removes a lot of logic when
+// having issues fitting the CPLD but doesn't seem to improve critical paths.
+//`define DISABLE_SHADOW_RAM  1
+
 // Define to delay falling edge of RAMOEB by one inverter
 //`define DELAY_RAMOEB_BY_1
 // Define to delay falling edge of RAMOEB by two inverters
-//`define DELAY_RAMOEB_BY_2
+`define DELAY_RAMOEB_BY_2
 // Define to delay falling edge of RAMOEB by three inverters
 //`define DELAY_RAMOEB_BY_3
 // Define to delay falling edge of RAMOEB by four inverters
@@ -323,9 +327,9 @@ module level1b_mk2_m (
   //
   // Option cached_shadow_ram can simplify the logic at the cost of making shadow and VRAM accesses both fast read/slow write
 `ifdef CACHED_SHADOW_RAM
-  assign himem_w =  (cpu_vpa|cpu_vda) & cpu_hiaddr_lat_q[7] & (!himem_vram_wr_lat_q | cpu_rnw );
+  assign himem_w =  cpu_hiaddr_lat_q[7] & (!himem_vram_wr_lat_q | cpu_rnw );
 `else
-  assign himem_w =  (cpu_vpa|cpu_vda) & cpu_hiaddr_lat_q[7] & (!himem_vram_wr_lat_q | cpu_rnw | map_data_q[`SHADOW_MEM_IDX]);
+  assign himem_w =  cpu_hiaddr_lat_q[7] & (!himem_vram_wr_lat_q | cpu_rnw | map_data_q[`SHADOW_MEM_IDX]);
 `endif
   assign hisync_w = (cpu_vpa&cpu_vda) & cpu_hiaddr_lat_q[7];
   assign sel_hs_w = map_data_q[`MAP_HSCLK_EN_IDX] & (( hisync_w & !io_access_pipe_q[0] ) |
@@ -353,12 +357,14 @@ module level1b_mk2_m (
   end
 
   always @ ( * ) begin
+`ifndef DISABLE_SHADOW_RAM
     if ( map_data_q[`SHADOW_MEM_IDX])
       // Always remap memory 0-12K in shadow mode, but only remap rest of RAM when not being accessed by MOS VDU routines
       // remap lomem = 0x0000 - 0x2FFF always              = !a15 & !a14 & !(a13 & a12)
       remapped_ram_access_r  = !cpu_data[7] & !cpu_adr[15] & ( (!cpu_adr[14] & !(cpu_adr[13] & cpu_adr[12])) | !mos_vdu_sync_q);
     else
       // Remap all of memory
+`endif
       remapped_ram_access_r = (!cpu_data[7] & !cpu_adr[15]);
   end
 
@@ -393,7 +399,11 @@ module level1b_mk2_m (
             // Not all bits are used so assign default first, then individual bits
 	    cpu_data_r = 8'b0  ;
 	    cpu_data_r[`MAP_HSCLK_EN_IDX]      = map_data_q[`MAP_HSCLK_EN_IDX] ;
+`ifdef DISABLE_SHADOW_RAM
+	    cpu_data_r[`SHADOW_MEM_IDX]        = 1'b0;
+`else
 	    cpu_data_r[`SHADOW_MEM_IDX]        = map_data_q[`SHADOW_MEM_IDX];
+`endif
 	    cpu_data_r[`MAP_MOS_IDX]           = map_data_q[`MAP_MOS_IDX];
 	    cpu_data_r[`MAP_ROM_IDX]           = map_data_q[`MAP_ROM_IDX];
 	    cpu_data_r[`CLK_CPUCLK_DIV_IDX_HI] = map_data_q[`CLK_CPUCLK_DIV_IDX_HI];
@@ -427,7 +437,9 @@ module level1b_mk2_m (
         if (cpld_reg_sel_w[`CPLD_REG_SEL_MAP_CC_IDX] & !cpu_rnw) begin
           // Not all bits are used so assign explicitly
 	  map_data_q[`MAP_HSCLK_EN_IDX]       <= cpu_data[`MAP_HSCLK_EN_IDX] ;
+`ifndef DISABLE_SHADOW_RAM
 	  map_data_q[`SHADOW_MEM_IDX]         <= cpu_data[`SHADOW_MEM_IDX];
+`endif
 	  map_data_q[`MAP_MOS_IDX]            <= cpu_data[`MAP_MOS_IDX];
 	  map_data_q[`MAP_ROM_IDX]            <= cpu_data[`MAP_ROM_IDX];
 	  map_data_q[`CLK_CPUCLK_DIV_IDX_HI]  <= cpu_data[`CLK_CPUCLK_DIV_IDX_HI];
@@ -435,9 +447,11 @@ module level1b_mk2_m (
         end
         else if (cpld_reg_sel_w[`CPLD_REG_SEL_BBC_PAGEREG_IDX] & !cpu_rnw )
           bbc_pagereg_q <= cpu_data;
+`ifndef DISABLE_SHADOW_RAM
 `ifdef MASTER_SHADOW_CTRL
         else if (cpld_reg_sel_w[`CPLD_REG_SEL_BBC_SHADOW_IDX] & !cpu_rnw )
           map_data_q[`SHADOW_MEM_IDX] <= cpu_data[`SHADOW_MEM_IDX];
+`endif
 `endif
       end // else: !if( !resetb )
 
@@ -454,7 +468,10 @@ module level1b_mk2_m (
   // Short pipeline to delay switching back to hs clock after an IO access to ensure any instruction
   // timed delays are respected.
   always @ ( negedge cpu_phi2_w )
-      io_access_pipe_q <= ( io_access_pipe_q >> 1 )| {`IO_ACCESS_DELAY_SZ{ io_access_pipe_d }};
+    if (io_access_pipe_d)
+      io_access_pipe_q <= {`IO_ACCESS_DELAY_SZ{1'b1}};
+    else if ( cpu_vpa & cpu_vda & rdy )
+      io_access_pipe_q <=  io_access_pipe_q >> 1 ;
 
   // Instruction was fetched from VDU routines in MOS if
   // - in the range EEC000 - EEDFFF (if remapped to himem)
