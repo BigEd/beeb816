@@ -345,16 +345,14 @@ module level1b_mk2_m (
     remapped_mos_access_r = 0;
     remapped_rom47_access_r = 0;
     remapped_romCF_access_r = 0;
-    if (!cpu_data[7] & cpu_adr[15] & (cpu_vpa|cpu_vda)) begin
-      // Remap MOS from C000-FBFF only (exclude IO space and vectors)
-      if ( cpu_adr[14] & !(&(cpu_adr[13:10])) & map_data_q[`MAP_MOS_IDX] )
-        remapped_mos_access_r = 1;
-      else if (!cpu_adr[14] & map_data_q[`MAP_ROM_IDX] ) begin
-        if ( bbc_pagereg_q[3:2] == 2'b11)
-          remapped_romCF_access_r = 1;
-        else if (bbc_pagereg_q[3:2] == 2'b01)
-          remapped_rom47_access_r = 1;
+    if (!cpu_data[7] & cpu_adr[15] & (cpu_vpa|cpu_vda) & map_data_q[`MAP_ROM_IDX]) begin
+      if (!cpu_adr[14]) begin
+        remapped_romCF_access_r = (bbc_pagereg_q[3:2] == 2'b11) ;
+        remapped_rom47_access_r = (bbc_pagereg_q[3:2] == 2'b01) ;
       end
+      // Remap MOS from C000-FBFF only (exclude IO space and vectors)
+      else
+        remapped_mos_access_r = !(&(cpu_adr[13:10]));
     end
   end
 
@@ -379,24 +377,20 @@ module level1b_mk2_m (
     // Native mode interrupts go to bank 0xFF (with other native 816 code)
     if ( native_mode_int_w )
       cpu_hiaddr_lat_d = 8'hFF;
-    // All remapped RAM/Mos accesses to 8'b1110x110
-    else if ( remapped_ram_access_r )
-      cpu_hiaddr_lat_d = 8'hFF;
-    else if (remapped_mos_access_r) begin
-      cpu_hiaddr_lat_d = 8'hFF;
-      cpu_a14_lat_d = 1'b0;
-    end
-    // All remapped ROM slots 4-7 accesses to 8'b1110x100
-    else if (remapped_rom47_access_r) begin
-      cpu_hiaddr_lat_d = 8'hFD;
-      cpu_a15_lat_d = bbc_pagereg_q[1];
-      cpu_a14_lat_d = bbc_pagereg_q[0];
-    end
-    // All remapped ROM slots C-F accesses to 8'b1110x101
-    else if (remapped_romCF_access_r) begin
-      cpu_hiaddr_lat_d = 8'hFE;
-      cpu_a15_lat_d = bbc_pagereg_q[1];
-      cpu_a14_lat_d = bbc_pagereg_q[0];
+    else begin
+      // All remapped RAM/Mos accesses to 8'b1110x110
+      if ( remapped_ram_access_r | remapped_mos_access_r) begin
+        cpu_hiaddr_lat_d = 8'hFF;
+        if ( remapped_mos_access_r)
+          cpu_a14_lat_d = 1'b0;
+      end
+      // All remapped ROM slots 4-7 accesses to 8'b1110x100
+      // All remapped ROM slots C-F accesses to 8'b1110x101
+      if (remapped_rom47_access_r | remapped_romCF_access_r) begin
+        cpu_hiaddr_lat_d = (remapped_rom47_access_r) ? 8'hFD: 8'hFE;
+        cpu_a15_lat_d = bbc_pagereg_q[1];
+        cpu_a14_lat_d = bbc_pagereg_q[0];
+      end
     end
   end
 
