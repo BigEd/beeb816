@@ -3,7 +3,7 @@
 // Option2 PCB Respin - main CPLD code
 //
 // Interrupts are not handled in '816 mode so leave this undefined for now
-//`ifdef REMAP_NATIVE_INTERRUPTS_D
+`define REMAP_NATIVE_INTERRUPTS_D 1
 // Depth of pipeline to delay switches to HS clock after an IO access. Need more cycles for
 // faster clocks so ideally this should be linked with the divider setting. Over 16MHz needs
 // 5 cycles but 13.8MHz seems ok with 4.
