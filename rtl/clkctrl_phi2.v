@@ -33,12 +33,12 @@ module clkctrl_phi2(
 
 `ifdef ENABLE_DIV2
   reg                      hsclk_by2_q;
-  (* KEEP="True" *) reg    cpuclk_r;
+  reg                      cpuclk_r;
 `ifdef ENABLE_DIV4
   reg                      hsclk_by4_q;
 `endif
 `else
-  (* KEEP="True" *) wire   cpuclk_r;
+  wire                     cpuclk_r;
 `endif
 
   reg                     hs_enable_q, ls_enable_q;
