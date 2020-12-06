@@ -33,8 +33,8 @@
 // Define this so that *TURBO enables both MOS and APPs ROMs
 `define UNIFY_ROM_REMAP_BITS 1
 //
-// Define this to delay the BBC_RNW low going edge by 2 inverter delays
-`define DELAY_RNW_LOW  1
+// Define this to delay the BBC_RNW low going edge by 2 inverter delays (mainly for Electron)
+//`define DELAY_RNW_LOW  1
 
 // Define this to force-keep some clock nets to reduce design size .. but cause slowdown in performance
 `define FORCE_KEEP_CLOCK 1
@@ -345,7 +345,7 @@ module level1b_mk2_m (
     remapped_mos_access_r = 0;
     remapped_rom47_access_r = 0;
     remapped_romCF_access_r = 0;
-    if (!cpu_data[7] & cpu_adr[15] & map_data_q[`MAP_MOS_IDX] ) begin
+    if (!cpu_data[7] & cpu_adr[15] & map_data_q[`MAP_MOS_IDX]) begin
       if (!cpu_adr[14] ) begin
         remapped_romCF_access_r = (bbc_pagereg_q[3:2] == 2'b11) ;
         remapped_rom47_access_r = (bbc_pagereg_q[3:2] == 2'b01) ;
