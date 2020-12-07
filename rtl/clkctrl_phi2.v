@@ -9,16 +9,7 @@
 // Number of retiming steps of slow clock for hs clock enable, N must be >= 2
 // at higher speeds esp with -15ns parts
 //`define SINGLE_LS_RETIMER 1
-`ifdef SINGLE_LS_RETIMER
-  `define LS_PIPE_SZ 1
-`else
-  `define LS_PIPE_SZ 2
-`endif
-
-// Define this to enable the div2 clock divider function
-`define ENABLE_DIV2 1
-// Define this to enable the div4 clock divider function
-`define ENABLE_DIV4 1
+`define LS_PIPE_SZ 2
 
 module clkctrl_phi2(
                input       hsclk_in,
@@ -31,18 +22,12 @@ module clkctrl_phi2(
                output      clkout
                );
 
-`ifdef ENABLE_DIV2
-  reg                      hsclk_by2_q;
-  reg                      cpuclk_r;
-`ifdef ENABLE_DIV4
-  reg                      hsclk_by4_q;
-`endif
-`else
-  wire                     cpuclk_r;
-`endif
-
+  reg                     hsclk_by2_q;
+  reg                     cpuclk_r;
+  reg                     hsclk_by4_q;
   reg                     hs_enable_q, ls_enable_q;
   reg                     selected_ls_q;
+  reg                     selected_hs_q;
   reg [`HS_PIPE_SZ-1:0]   pipe_retime_ls_enable_q;
   reg [`LS_PIPE_SZ-1:0]   pipe_retime_hs_enable_q;
 
@@ -51,11 +36,10 @@ module clkctrl_phi2(
 
   assign clkout = (cpuclk_r & hs_enable_q) | (lsclk_in & ls_enable_q);
   assign lsclk_selected = selected_ls_q;
-  assign hsclk_selected = hs_enable_q;
+  // New state for feedback to clock selection
+  assign hsclk_selected = selected_hs_q;
 
-`ifdef ENABLE_DIV2
   always @ ( * )
-`ifdef ENABLE_DIV4
     case (cpuclk_div_sel)
       2'b00 : cpuclk_r = hsclk_in;
       2'b01 : cpuclk_r = hsclk_by2_q;
@@ -63,15 +47,6 @@ module clkctrl_phi2(
       2'b11 : cpuclk_r = hsclk_by4_q;
       default: cpuclk_r = 1'bx;
     endcase // case (cpuclk_div_sel)
-`else
-  if (cpuclk_div_sel[0]==1'b1)
-    cpuclk_r = hsclk_by2_q;
-  else
-    cpuclk_r = hsclk_in;
-`endif
-`else // !`ifdef ENABLE_DIV2
-  assign cpuclk_r = hsclk_in;
-`endif
 
   // Selected LS signal must change on posedge of clock
   always @ (posedge lsclk_in or negedge rst_b)
@@ -80,11 +55,29 @@ module clkctrl_phi2(
     else
       selected_ls_q <= !hsclk_sel & !retimed_hs_enable_w;
 
-  always @ ( negedge cpuclk_r or negedge rst_b )
+// Edge triggered FF for feedback to clock selection
+  always @ ( posedge cpuclk_r or negedge rst_b )
     if ( ! rst_b )
-      hs_enable_q <= 1'b0;
+      selected_hs_q <= 1'b0;
     else
-      hs_enable_q <= hsclk_sel & !retimed_ls_enable_w;
+      selected_hs_q <= hs_enable_q;
+
+// Make HS enable latch open in 2nd half of cycle, to allow more time
+// for selection signal to stabilize. (Remember that clock sense is
+// inverted here - first phase is high, second phase is low)
+  always @ (  *  )
+    if ( !cpuclk_r ) begin
+      if ( ! rst_b )
+        hs_enable_q <= 1'b0;
+      else
+        hs_enable_q <= hsclk_sel & !retimed_ls_enable_w;
+    end
+
+//  always @ ( negedge cpuclk_r or negedge rst_b )
+//    if ( ! rst_b )
+//      hs_enable_q <= 1'b0;
+//    else
+//      hs_enable_q <= hsclk_sel & !retimed_ls_enable_w;
 
   always @ ( negedge lsclk_in or negedge rst_b )
     if ( ! rst_b )
@@ -111,7 +104,6 @@ module clkctrl_phi2(
       pipe_retime_hs_enable_q <= {hsclk_sel, pipe_retime_hs_enable_q[`LS_PIPE_SZ-1:1]};
 `endif
 
-`ifdef ENABLE_DIV2
   // Clock Dividers
   always @ ( posedge hsclk_in  or negedge rst_b)
     if ( !rst_b )
@@ -120,7 +112,6 @@ module clkctrl_phi2(
       hsclk_by2_q <= !hsclk_by2_q;
 `endif
 
-`ifdef ENABLE_DIV4
   always @ ( posedge hsclk_by2_q  or negedge rst_b )
     if ( !rst_b )
       hsclk_by4_q <= 1'b0;
