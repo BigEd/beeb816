@@ -22,9 +22,7 @@ module clkctrl_phi2(
                output      clkout
                );
 
-  reg                     hsclk_by2_q;
-  reg                     cpuclk_r;
-  reg                     hsclk_by4_q;
+  reg [1:0]               clkdiv_q;
   reg                     hs_enable_q, ls_enable_q;
   reg                     selected_ls_q;
   reg                     selected_hs_q;
@@ -33,20 +31,14 @@ module clkctrl_phi2(
 
   wire                    retimed_ls_enable_w = pipe_retime_ls_enable_q[0];
   wire                    retimed_hs_enable_w = pipe_retime_hs_enable_q[0];
+  wire                    div2not4_w = (cpuclk_div_sel == 2'b01);
+  wire                    cpuclk_w;
 
-  assign clkout = (cpuclk_r & hs_enable_q) | (lsclk_in & ls_enable_q);
+  assign clkout = (cpuclk_w & hs_enable_q) | (lsclk_in & ls_enable_q);
   assign lsclk_selected = selected_ls_q;
   // New state for feedback to clock selection
   assign hsclk_selected = selected_hs_q;
-
-  always @ ( * )
-    case (cpuclk_div_sel)
-      2'b00 : cpuclk_r = hsclk_in;
-      2'b01 : cpuclk_r = hsclk_by2_q;
-      2'b10 : cpuclk_r = hsclk_by4_q;
-      2'b11 : cpuclk_r = hsclk_by4_q;
-      default: cpuclk_r = 1'bx;
-    endcase // case (cpuclk_div_sel)
+  assign cpuclk_w = (cpuclk_div_sel==2'b00)? hsclk_in : clkdiv_q[0];
 
   // Selected LS signal must change on posedge of clock
   always @ (posedge lsclk_in or negedge rst_b)
@@ -56,7 +48,7 @@ module clkctrl_phi2(
       selected_ls_q <= !hsclk_sel & !retimed_hs_enable_w;
 
 // Edge triggered FF for feedback to clock selection
-  always @ ( posedge cpuclk_r or negedge rst_b )
+  always @ ( posedge cpuclk_w or negedge rst_b )
     if ( ! rst_b )
       selected_hs_q <= 1'b0;
     else
@@ -66,18 +58,12 @@ module clkctrl_phi2(
 // for selection signal to stabilize. (Remember that clock sense is
 // inverted here - first phase is high, second phase is low)
   always @ (  *  )
-    if ( !cpuclk_r ) begin
+    if ( !cpuclk_w ) begin
       if ( ! rst_b )
         hs_enable_q <= 1'b0;
       else
         hs_enable_q <= hsclk_sel & !retimed_ls_enable_w;
     end
-
-//  always @ ( negedge cpuclk_r or negedge rst_b )
-//    if ( ! rst_b )
-//      hs_enable_q <= 1'b0;
-//    else
-//      hs_enable_q <= hsclk_sel & !retimed_ls_enable_w;
 
   always @ ( negedge lsclk_in or negedge rst_b )
     if ( ! rst_b )
@@ -85,7 +71,7 @@ module clkctrl_phi2(
     else
       ls_enable_q <= !hsclk_sel & !retimed_hs_enable_w;
 
-  always @ ( negedge  cpuclk_r or negedge rst_b )
+  always @ ( negedge  cpuclk_w or negedge rst_b )
     if ( ! rst_b )
       pipe_retime_ls_enable_q <= {`HS_PIPE_SZ{1'b1}};
     else
@@ -98,24 +84,13 @@ module clkctrl_phi2(
     if ( hs_enable_q )
       pipe_retime_hs_enable_q <= {`LS_PIPE_SZ{1'b1}};
     else
-`ifdef SINGLE_LS_RETIMER
-      pipe_retime_hs_enable_q <= hsclk_sel;
-`else
       pipe_retime_hs_enable_q <= {hsclk_sel, pipe_retime_hs_enable_q[`LS_PIPE_SZ-1:1]};
-`endif
 
   // Clock Dividers
   always @ ( posedge hsclk_in  or negedge rst_b)
     if ( !rst_b )
-      hsclk_by2_q <= 1'b0;
+      clkdiv_q <= 2'b00;
     else
-      hsclk_by2_q <= !hsclk_by2_q;
-`endif
+      clkdiv_q <= { !clkdiv_q[0], (div2not4_w) ? !clkdiv_q[0]: clkdiv_q[1]};
 
-  always @ ( posedge hsclk_by2_q  or negedge rst_b )
-    if ( !rst_b )
-      hsclk_by4_q <= 1'b0;
-    else
-      hsclk_by4_q <= !hsclk_by4_q;
-`endif
 endmodule
