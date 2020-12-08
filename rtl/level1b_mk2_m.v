@@ -8,11 +8,6 @@
 // faster clocks so ideally this should be linked with the divider setting. Over 16MHz needs
 // 5 cycles but 13.8MHz seems ok with 4. Modified now to count SYNCs rather than cycles
 `define IO_ACCESS_DELAY_SZ     3
-// Define this to get a clean deassertion/reassertion of RAM CEB but this limits some
-// setup time from CEB low to data valid etc. Not an issue in a board with a faster
-// SMD RAM so expect to set this in the final design, but omitting it can help with
-// speed in the proto
-`define ASSERT_RAMCEB_IN_PHI2  1
 //
 // Define this for the Acorn Electron instead of BBC Micro
 // `define ELECTRON 1
@@ -46,14 +41,19 @@
 // having issues fitting the CPLD but doesn't seem to improve critical paths.
 //`define DISABLE_SHADOW_RAM  1
 
-// Define to delay falling edge of RAMOEB by one inverter
-//`define DELAY_RAMOEB_BY_1
-// Define to delay falling edge of RAMOEB by two inverters
-`define DELAY_RAMOEB_BY_2
-// Define to delay falling edge of RAMOEB by three inverters
-//`define DELAY_RAMOEB_BY_3
-// Define to delay falling edge of RAMOEB by four inverters
-//`define DELAY_RAMOEB_BY_4
+`ifdef FAST_SRAM
+  // Define this to get a clean deassertion/reassertion of RAM CEB but this limits some
+  // setup time from CEB low to data valid etc.
+  `define ASSERT_RAMCEB_IN_PHI2  1
+  // Define to delay falling edge of RAMOEB by one inverter
+  //`define DELAY_RAMOEB_BY_1
+  // Define to delay falling edge of RAMOEB by two inverters
+  `define DELAY_RAMOEB_BY_2
+  // Define to delay falling edge of RAMOEB by three inverters
+  //`define DELAY_RAMOEB_BY_3
+  // Define to delay falling edge of RAMOEB by four inverters
+  //`define DELAY_RAMOEB_BY_4
+`endif
 
 `define MAP_CC_DATA_SZ         8
 `define SHADOW_MEM_IDX         7
