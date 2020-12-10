@@ -9,11 +9,8 @@
 // 5 cycles but 13.8MHz seems ok with 4. Modified now to count SYNCs rather than cycles
 `define IO_ACCESS_DELAY_SZ     3
 //
-// Define this for the Acorn Electron instead of BBC Micro
-// `define ELECTRON 1
-//
 // Define this for BBC B+/Master Shadow RAM control
-//`define MASTER_SHADOW_CTRL 1
+`define BPLUS_SHADOW_CTRL 1
 //
 // Use data latches on CPU2BBC and/or BBC2CPU data transfers to improve hold times
 `define USE_DATA_LATCHES_BBC2CPU 1
@@ -21,16 +18,10 @@
 //
 // Define this to use fast reads/slow writes to Shadow as with the VRAM to simplify decoding
 //`define CACHED_SHADOW_RAM 1
-//`define DIRECT_DRIVE_A13_A8
-//`define NO_SELECT_FLOPS 1
 `define WRITE_PROTECT_REMAPPED_ROM 1
 //
 // Define this so that *TURBO enables both MOS and APPs ROMs
 `define UNIFY_ROM_REMAP_BITS 1
-//
-// Define this to delay the BBC_RNW low going edge by 2 inverter delays (mainly for Electron)
-//`define DELAY_RNW_LOW  1
-
 // Define this to force-keep some clock nets to reduce design size .. but cause slowdown in performance
 `define FORCE_KEEP_CLOCK 1
 
@@ -41,6 +32,9 @@
 // having issues fitting the CPLD but doesn't seem to improve critical paths.
 //`define DISABLE_SHADOW_RAM  1
 
+// Set this define to run with the 10ns SRAM. It can also be used with slow 55ns SRAM but limits
+// top speed by a couple of MHz.
+`define FAST_SRAM 1
 `ifdef FAST_SRAM
   // Define this to get a clean deassertion/reassertion of RAM CEB but this limits some
   // setup time from CEB low to data valid etc.
@@ -53,6 +47,14 @@
   //`define DELAY_RAMOEB_BY_3
   // Define to delay falling edge of RAMOEB by four inverters
   //`define DELAY_RAMOEB_BY_4
+`endif
+
+// Define this for the Acorn Electron instead of BBC Micro
+// `define ELECTRON 1
+`ifdef ELECTRON
+  // Define this to delay the BBC_RNW low going edge by 2 inverter delays (mainly for Electron but compatible
+  // with Beeb, possibly)
+  //`define DELAY_RNW_LOW  1
 `endif
 
 `define MAP_CC_DATA_SZ         8
@@ -68,7 +70,7 @@
 `define CLK_CPUCLK_DIV_IDX_LO  0
 `define BBC_PAGEREG_SZ         4    // only the bottom four ROM selection bits
 
-`ifdef MASTER_SHADOW_CTRL
+`ifdef BPLUS_SHADOW_CTRL
 `define CPLD_REG_SEL_SZ        3
 `define CPLD_REG_SEL_BBC_SHADOW_IDX 2
 `else
@@ -76,18 +78,6 @@
 `endif
 `define CPLD_REG_SEL_MAP_CC_IDX 1
 `define CPLD_REG_SEL_BBC_PAGEREG_IDX 0
-
-// Address of ROM selection reg in BBC memory map
-`ifdef ELECTRON
-  `define PAGED_ROM_SEL 16'hFE05
-`else
-  `define PAGED_ROM_SEL 16'hFE30
-  // BBC B+ uses bit 7 of &FE34 for shadow RAM select
-  `define SHADOW_RAM_SEL 16'hFE34
-`endif
-
-`define PAGED_ROM_SELECTION  dec_rom_reg
-`define SHADOW_RAM_SELECTION dec_ram_reg
 
 
 module level1b_mk2_m (
@@ -137,10 +127,8 @@ module level1b_mk2_m (
   reg [7:0]                            cpu_data_lat_q;
 `endif
   // This is the internal register controlling which features like high speed clocks etc are enabled
-`ifndef NO_SELECT_FLOPS
   reg [ `CPLD_REG_SEL_SZ-1:0]           cpld_reg_sel_q;
   wire [ `CPLD_REG_SEL_SZ-1:0]          cpld_reg_sel_d;
-`endif
   // This will be a copy of the BBC ROM page register so we know which ROM is selected
   reg [`BBC_PAGEREG_SZ-1:0]            bbc_pagereg_q;
   reg [`MAP_CC_DATA_SZ-1:0]            map_data_q;
@@ -272,27 +260,15 @@ module level1b_mk2_m (
   // All addresses starting with 0b10 go to internal IO registers which update on the
   // rising edge of cpu_phi1 - use the cpu_data bus directly for the high address
   // bits since it's stable by the end of phi1
-`ifdef NO_SELECT_FLOPS
-  assign cpld_reg_sel_w[`CPLD_REG_SEL_MAP_CC_IDX] =  (cpu_hiaddr_lat_q[7:6]== 2'b10) && cpu_vda  && rdy ;
-  assign cpld_reg_sel_w[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = (cpu_hiaddr_lat_q[7]== 1'b0) && `PAGED_ROM_SELECTION && cpu_vda && rdy;
-  `ifdef MASTER_SHADOW_CTRL
-  assign cpld_reg_sel_w[`CPLD_REG_SEL_BBC_SHADOW_IDX] = (cpu_hiaddr_lat_q[7]== 1'b0) && `SHADOW_RAM_SELECTION && cpu_vda && rdy;
-  `endif
-`else
   assign cpld_reg_sel_w = cpld_reg_sel_q;
   assign cpld_reg_sel_d[`CPLD_REG_SEL_MAP_CC_IDX] =  ( cpu_data[7:6]== 2'b10);
-  assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = (cpu_data[7]== 1'b0) && `PAGED_ROM_SELECTION ;
-`ifdef MASTER_SHADOW_CTRL
-  assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_SHADOW_IDX] = (cpu_data[7]== 1'b0) && `SHADOW_RAM_SELECTION ;
-`endif
+  assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = (cpu_data[7]== 1'b0) && dec_rom_reg ;
+`ifdef BPLUS_SHADOW_CTRL
+  assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_SHADOW_IDX] = (cpu_data[7]== 1'b0) && dec_shadow_reg ;
 `endif
 
   // Force dummy read access when accessing himem explicitly but not for remapped RAM accesses which can still complete
-`ifdef DIRECT_DRIVE_A13_A8
-  assign bbc_adr = { ((dummy_access_w) ? 2'b10 : cpu_adr[15:14]), cpu_adr[13:12]};
-`else
   assign bbc_adr = { (dummy_access_w) ? 4'b1000 : cpu_adr[15:12] };
-`endif
 
 `ifdef DELAY_RNW_LOW
   (* KEEP="TRUE" *) wire bbc_rnw_pre, bbc_rnw_b, bbc_rnw_del,bbc_rnw_b2, bbc_rnw_del2;
@@ -452,7 +428,7 @@ module level1b_mk2_m (
         else if (cpld_reg_sel_w[`CPLD_REG_SEL_BBC_PAGEREG_IDX] & !cpu_rnw )
           bbc_pagereg_q <= cpu_data;
 `ifndef DISABLE_SHADOW_RAM
-`ifdef MASTER_SHADOW_CTRL
+`ifdef BPLUS_SHADOW_CTRL
         else if (cpld_reg_sel_w[`CPLD_REG_SEL_BBC_SHADOW_IDX] & !cpu_rnw )
           map_data_q[`SHADOW_MEM_IDX] <= cpu_data[`SHADOW_MEM_IDX];
 `endif
@@ -483,26 +459,19 @@ module level1b_mk2_m (
     end
   end
 
-
-
   // Instruction was fetched from VDU routines in MOS if
-  // - in the range EEC000 - EEDFFF (if remapped to himem)
+  // - in the range FFC000 - FFDFFF (if remapped to himem )
   // - OR in range 00C000 - 00DFFF if ROM remapping disabled.
   //
-  // Address bits
-  // 23 22 21 20 19 18 17 16
-  // 0  x  x  x  x  x  x  x   BBC Motherboard resources
-  // 1  0  x  x  x  x  x  x   High IO Space
-  // 1  1  0  x  x  0  0  0   5 banks of Native RAM for 816 (or more!)
-  // 1  1  1  0  x  1  0  0   ROMS 4,5,6,7 remapping
-  // 1  1  1  0  x  1  0  1   ROMS 12,13,14,15 remapping
-  // 1  1  1  0  x  1  1  0   MOS + Shadow RAM/VRAM caching + low RAM (below 12K)
-  // 1  1  1  1  1  1  1  1   816 vectors (not implemented)
+  // ie 11111111_110xxxxx  (decoded as 1xxx1111_110xxxx)
+  //    00000000_110xxxxx  (decoded as 0xxxxxxx_110xxxx)
   //
-  // Decode VDU routines then as   xxx0_1110
   always @ ( negedge cpu_phi2_w )
-    if ( cpu_vpa & cpu_vda)
-      mos_vdu_sync_q <=   ((map_data_q[`MAP_MOS_IDX] && (cpu_hiaddr_lat_q[4:0]==5'h0E))||(!cpu_hiaddr_lat_q[7])) & (cpu_adr[15:13]==3'b110);
+    if ( cpu_vpa & cpu_vda )
+      if ( map_data_q[`MAP_MOS_IDX])
+        mos_vdu_sync_q <= ({cpu_hiaddr_lat_q[7],cpu_hiaddr_lat_q[3:0], cpu_adr[15:13]}==8'b1_1111_110);
+      else
+        mos_vdu_sync_q <= ({cpu_hiaddr_lat_q[7],cpu_adr[15:13]}==4'b0_110);
 
   // Latches for the high address bits open during PHI1
   always @ ( * )
