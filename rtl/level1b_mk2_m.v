@@ -47,13 +47,6 @@
   //`define DELAY_RAMOEB_BY_4
 `endif
 
-// Define this for the Acorn Electron instead of BBC Micro
-// `define ELECTRON 1
-`ifdef ELECTRON
-  // Define this to delay the BBC_RNW low going edge by 2 inverter delays (mainly for Electron but compatible
-  // with Beeb, possibly)
-  //`define DELAY_RNW_LOW  1
-`endif
 
 `define MAP_CC_DATA_SZ         8
 `define SHADOW_MEM_IDX         7
@@ -156,7 +149,18 @@ module level1b_mk2_m (
   wire                                 himem_w;
   wire                                 hisync_w;
   wire [ `CPLD_REG_SEL_SZ-1:0]         cpld_reg_sel_w;
+  
+  wire                                 elk_mode_w;
+  wire                                 beeb_mode_w;
+  wire                                 bplus_mode_w;
+  wire                                 master_mode_w;
 
+  // Decode jumpers on J[1:0]
+  assign beeb_mode_w = (j==2'b00);
+  assign bplus_mode_w = (j==2'b01);
+  assign elk_mode_w = (j==2'b10);
+  assign master_mode_w = (j==2'b11);
+  
   // Force keep intermediate nets to preserve strict delay chain for clocks
   (* KEEP="TRUE" *) wire ckdel_1_b;
   (* KEEP="TRUE" *) wire ckdel_2;
@@ -266,17 +270,15 @@ module level1b_mk2_m (
   // Force dummy read access when accessing himem explicitly but not for remapped RAM accesses which can still complete
   assign bbc_adr = { (dummy_access_w) ? 4'b1000 : cpu_adr[15:12] };
 
-`ifdef DELAY_RNW_LOW
+  // Build delay chain for use with Electron to improve xtalk (will be bypassed for other machines)
   (* KEEP="TRUE" *) wire bbc_rnw_pre, bbc_rnw_b, bbc_rnw_del,bbc_rnw_b2, bbc_rnw_del2;
   assign bbc_rnw_pre = cpu_rnw | dummy_access_w ;
   INV    bbc_rnw_0( .I(bbc_rnw_pre), .O(bbc_rnw_b) );
   INV    bbc_rnw_1( .I(bbc_rnw_b), .O(bbc_rnw_del) );
   INV    bbc_rnw_2( .I(bbc_rnw_del), .O(bbc_rnw_b2) );
   INV    bbc_rnw_3( .I(bbc_rnw_b2), .O(bbc_rnw_del2) );
-  assign bbc_rnw = bbc_rnw_del2 | bbc_rnw_pre;
-`else
-  assign bbc_rnw = cpu_rnw | dummy_access_w ;
-`endif
+  // Electron needs delay on RNW to reduce xtalk 
+  assign bbc_rnw = (elk_mode_w & bbc_rnw_del2) | bbc_rnw_pre ;
 
 `ifdef USE_DATA_LATCHES_CPU2BBC
   assign bbc_data = ( !bbc_rnw & bbc_phi2) ? cpu_data_lat_q : { 8{1'bz}};
