@@ -20,8 +20,6 @@
 //`define CACHED_SHADOW_RAM 1
 `define WRITE_PROTECT_REMAPPED_ROM 1
 //
-// Define this so that *TURBO enables both MOS and APPs ROMs
-`define UNIFY_ROM_REMAP_BITS 1
 // Define this to force-keep some clock nets to reduce design size .. but cause slowdown in performance
 `define FORCE_KEEP_CLOCK 1
 
@@ -34,7 +32,7 @@
 
 // Set this define to run with the 10ns SRAM. It can also be used with slow 55ns SRAM but limits
 // top speed by a couple of MHz.
-`define FAST_SRAM 1
+//`define FAST_SRAM 1
 `ifdef FAST_SRAM
   // Define this to get a clean deassertion/reassertion of RAM CEB but this limits some
   // setup time from CEB low to data valid etc.
@@ -59,12 +57,10 @@
 
 `define MAP_CC_DATA_SZ         8
 `define SHADOW_MEM_IDX         7
+`define JUMPER_1_IDX           6
+`define JUMPER_0_IDX           5
 `define MAP_ROM_IDX            4
-`ifdef UNIFY_ROM_REMAP_BITS
-  `define MAP_MOS_IDX          `MAP_ROM_IDX
-`else
-  `define MAP_MOS_IDX            5
-`endif
+`define MAP_MOS_IDX          `MAP_ROM_IDX
 `define MAP_HSCLK_EN_IDX       2
 `define CLK_CPUCLK_DIV_IDX_HI  1
 `define CLK_CPUCLK_DIV_IDX_LO  0
@@ -384,7 +380,8 @@ module level1b_mk2_m (
 `else
 	    cpu_data_r[`SHADOW_MEM_IDX]        = map_data_q[`SHADOW_MEM_IDX];
 `endif
-	    cpu_data_r[`MAP_MOS_IDX]           = map_data_q[`MAP_MOS_IDX];
+            cpu_data_r[`JUMPER_1_IDX]          = j[1];
+            cpu_data_r[`JUMPER_0_IDX]          = j[0];
 	    cpu_data_r[`MAP_ROM_IDX]           = map_data_q[`MAP_ROM_IDX];
 	    cpu_data_r[`CLK_CPUCLK_DIV_IDX_HI] = map_data_q[`CLK_CPUCLK_DIV_IDX_HI];
 	    cpu_data_r[`CLK_CPUCLK_DIV_IDX_LO] = map_data_q[`CLK_CPUCLK_DIV_IDX_LO];
@@ -420,7 +417,6 @@ module level1b_mk2_m (
 `ifndef DISABLE_SHADOW_RAM
 	  map_data_q[`SHADOW_MEM_IDX]         <= cpu_data[`SHADOW_MEM_IDX];
 `endif
-	  map_data_q[`MAP_MOS_IDX]            <= cpu_data[`MAP_MOS_IDX];
 	  map_data_q[`MAP_ROM_IDX]            <= cpu_data[`MAP_ROM_IDX];
 	  map_data_q[`CLK_CPUCLK_DIV_IDX_HI]  <= cpu_data[`CLK_CPUCLK_DIV_IDX_HI];
 	  map_data_q[`CLK_CPUCLK_DIV_IDX_LO]  <= cpu_data[`CLK_CPUCLK_DIV_IDX_LO];
