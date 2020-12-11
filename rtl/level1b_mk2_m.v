@@ -271,12 +271,10 @@ module level1b_mk2_m (
   assign bbc_adr = { (dummy_access_w) ? 4'b1000 : cpu_adr[15:12] };
 
   // Build delay chain for use with Electron to improve xtalk (will be bypassed for other machines)
-  (* KEEP="TRUE" *) wire bbc_rnw_pre, bbc_rnw_b, bbc_rnw_del,bbc_rnw_b2, bbc_rnw_del2;
+  (* KEEP="TRUE" *) wire bbc_rnw_pre, bbc_rnw_del, bbc_rnw_del2;
   assign bbc_rnw_pre = cpu_rnw | dummy_access_w ;
-  INV    bbc_rnw_0( .I(bbc_rnw_pre), .O(bbc_rnw_b) );
-  INV    bbc_rnw_1( .I(bbc_rnw_b), .O(bbc_rnw_del) );
-  INV    bbc_rnw_2( .I(bbc_rnw_del), .O(bbc_rnw_b2) );
-  INV    bbc_rnw_3( .I(bbc_rnw_b2), .O(bbc_rnw_del2) );
+  BUF    bbc_rnw_0( .I(bbc_rnw_pre), .O(bbc_rnw_del) );
+  BUF    bbc_rnw_1( .I(bbc_rnw_del), .O(bbc_rnw_del2) );
   // Electron needs delay on RNW to reduce xtalk 
   assign bbc_rnw = (elk_mode_w & bbc_rnw_del2) | bbc_rnw_pre ;
 
