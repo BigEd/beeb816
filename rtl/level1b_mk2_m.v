@@ -14,7 +14,6 @@
 //
 // Use data latches on CPU2BBC and/or BBC2CPU data transfers to improve hold times
 `define USE_DATA_LATCHES_BBC2CPU 1
-//`define USE_DATA_LATCHES_CPU2BBC 1
 //
 // Define this to use fast reads/slow writes to Shadow as with the VRAM to simplify decoding
 //`define CACHED_SHADOW_RAM 1
@@ -111,9 +110,6 @@ module level1b_mk2_m (
 `endif
 `ifdef USE_DATA_LATCHES_BBC2CPU
   reg [7:0]                            bbc_data_lat_q;
-`endif
-`ifdef USE_DATA_LATCHES_CPU2BBC
-  reg [7:0]                            cpu_data_lat_q;
 `endif
   // This is the internal register controlling which features like high speed clocks etc are enabled
   reg [ `CPLD_REG_SEL_SZ-1:0]           cpld_reg_sel_q;
@@ -277,12 +273,7 @@ module level1b_mk2_m (
   BUF    bbc_rnw_1( .I(bbc_rnw_del), .O(bbc_rnw_del2) );
   // Electron needs delay on RNW to reduce xtalk 
   assign bbc_rnw = (elk_mode_w & bbc_rnw_del2) | bbc_rnw_pre ;
-
-`ifdef USE_DATA_LATCHES_CPU2BBC
-  assign bbc_data = ( !bbc_rnw & bbc_phi2) ? cpu_data_lat_q : { 8{1'bz}};
-`else
   assign bbc_data = ( !bbc_rnw & bbc_phi2) ? cpu_data : { 8{1'bz}};
-`endif
   assign cpu_data = cpu_data_r;
 
   // Identify Video RAM so that in non shadow mode VRAM writes can be slowed down
@@ -487,12 +478,6 @@ module level1b_mk2_m (
   always @ ( * )
     if ( !bbc_phi1 )
       bbc_data_lat_q <= bbc_data;
-`endif
-
-`ifdef USE_DATA_LATCHES_CPU2BBC
-  always @ ( * )
-    if ( cpu_phi2_w )
-      cpu_data_lat_q <= cpu_data;
 `endif
 
 endmodule // level1b_m
