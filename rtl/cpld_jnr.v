@@ -1,3 +1,4 @@
+
 `timescale 1ns / 1ns
 
 `define ELK_PAGED_ROM_SEL 16'hFE05
@@ -30,7 +31,9 @@ module cpld_jnr (
   assign bbc_adr = bbc_adr_lat_q;
   assign dec_shadow_reg = (bplus_mode_w) ? (cpu_adr==`BPLUS_SHADOW_RAM_SEL) : 1'b0;
   assign dec_rom_reg = (elk_mode_w)? (cpu_adr==`ELK_PAGED_ROM_SEL) : (cpu_adr==`PAGED_ROM_SEL);
-  assign dec_fe4x = (cpu_adr[15:4]==12'hFE4);
+
+  // Flag FE4x (VIA) accesses and also all &FC, &FD expansion pages 
+  assign dec_fe4x = (cpu_adr[15:4]==12'hFE4) || (cpu_adr[15:9]==7'b1111_110);
 
   always @ ( * )
     if ( lat_en  )
