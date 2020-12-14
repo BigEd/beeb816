@@ -15,7 +15,6 @@
 //
 // Define this to use fast reads/slow writes to Shadow as with the VRAM to simplify decoding
 //`define CACHED_SHADOW_RAM 1
-`define WRITE_PROTECT_REMAPPED_ROM 1
 //
 // Define this to force-keep some clock nets to reduce design size .. but cause slowdown in performance
 `define FORCE_KEEP_CLOCK 1
@@ -27,22 +26,13 @@
 // having issues fitting the CPLD but doesn't seem to improve critical paths.
 //`define DISABLE_SHADOW_RAM  1
 
-// Set this define to run with the 10ns SRAM. It can also be used with slow 55ns SRAM but limits
-// top speed by a couple of MHz.
+
+// Set this to force use of FAST SRAM timing (default is to read TP[0] state)
 //`define FAST_SRAM 1
-`ifdef FAST_SRAM
-  // Define this to get a clean deassertion/reassertion of RAM CEB but this limits some
-  // setup time from CEB low to data valid etc.
-  `define ASSERT_RAMCEB_IN_PHI2  1
-  // Define to delay falling edge of RAMOEB by one inverter
-  //`define DELAY_RAMOEB_BY_1
-  // Define to delay falling edge of RAMOEB by two inverters
-  `define DELAY_RAMOEB_BY_2
-  // Define to delay falling edge of RAMOEB by three inverters
-  //`define DELAY_RAMOEB_BY_3
-  // Define to delay falling edge of RAMOEB by four inverters
-  //`define DELAY_RAMOEB_BY_4
-`endif
+// Set one of these to falling edge of RAMOEB by one buffer when running with fast SRAM
+//`define DELAY_RAMOEB_BY_1
+`define DELAY_RAMOEB_BY_2
+//`define DELAY_RAMOEB_BY_3
 
 
 `define MAP_CC_DATA_SZ         8
@@ -77,7 +67,7 @@ module level1b_mk2_m (
                       input                hsclk,
                       input                cpu_rnw,
                       input [1:0]          j,
-                      output [1:0]         tp,
+                      inout [1:0]          tp,
                       input                dec_shadow_reg,
                       input                dec_rom_reg,
                       input                dec_fe4x,
@@ -103,9 +93,7 @@ module level1b_mk2_m (
   reg [7:0]                            cpu_data_r;
   reg                                  mos_vdu_sync_q;
   reg                                  himem_vram_wr_lat_q;
-`ifdef WRITE_PROTECT_REMAPPED_ROM
   reg                                  rom_wr_protect_lat_q;
-`endif
 `ifdef USE_DATA_LATCHES_BBC2CPU
   reg [7:0]                            bbc_data_lat_q;
 `endif
@@ -143,18 +131,35 @@ module level1b_mk2_m (
   wire                                 himem_w;
   wire                                 hisync_w;
   wire [ `CPLD_REG_SEL_SZ-1:0]         cpld_reg_sel_w;
-  
+
   wire                                 elk_mode_w;
   wire                                 beeb_mode_w;
   wire                                 bplus_mode_w;
   wire                                 master_mode_w;
+  wire                                 fast_ram_w;
 
   // Decode jumpers on J[1:0]
   assign beeb_mode_w = (j==2'b00);
   assign bplus_mode_w = (j==2'b01);
   assign elk_mode_w = (j==2'b10);
   assign master_mode_w = (j==2'b11);
-  
+
+  // Fast RAM mode set by jumper on tp[0] unless being use as a test point
+`ifdef OBSERVE_CLOCKS
+  assign tp = { bbc_phi1, cpu_phi2 };
+  `ifdef FAST_SRAM
+  assign fast_ram_w = 1'b1;
+  `else
+  assign fast_ram_w = 1'b0;
+  `endif
+`else
+  `ifdef FAST_SRAM
+  assign fast_ram_w = 1'b1;
+  `else
+  assign fast_ram_w = tp[0];
+  `endif
+`endif
+
   // Force keep intermediate nets to preserve strict delay chain for clocks
   (* KEEP="TRUE" *) wire ckdel_1_b;
   (* KEEP="TRUE" *) wire ckdel_2;
@@ -185,65 +190,36 @@ module level1b_mk2_m (
   assign irqb = 1'bz;
   assign nmib = 1'bz;
 
-`ifdef OBSERVE_CLOCKS
-  assign tp = { bbc_phi1, cpu_phi2 };
-`endif
 
   // Native mode interrupts will be redirected to himem
   assign native_mode_int_w = !cpu_vpb & !cpu_e ;
   // Drive the all RAM address pins, allowing for 512K RAM connection
   assign ram_adr = { cpu_hiaddr_lat_q[2:0], cpu_a15_lat_q, cpu_a14_lat_q } ;
-  assign lat_en = !dummy_access_w; 
+  assign lat_en = !dummy_access_w;
 
 `ifdef DELAY_RAMOEB_BY_1
-  (* KEEP="TRUE" *) wire ramoedel_1_b;
-  INV    ramoedel1   ( .I(!cpu_rnw | cpu_phi1_w), .O(ramoedel_1_b));
-  assign ram_oeb = !cpu_rnw | cpu_phi1_w | !ramoedel_1_b;
+  (* KEEP="TRUE" *) wire ramoeb_del_1;
+  BUF    ramoedel1   ( .I(!cpu_rnw | cpu_phi1_w), .O(ramoeb_del_1));
+  `define DELAYOEB ramoeb_del_1
 `elsif DELAY_RAMOEB_BY_2
-  (* KEEP="TRUE" *) wire ramoedel_1_b;
-  (* KEEP="TRUE" *) wire ramoedel_2;
-  INV    ramoedel1   ( .I(!cpu_rnw | cpu_phi1_w), .O(ramoedel_1_b));
-  INV    ramoedel2   ( .I(ramoedel_1_b),    .O(ramoedel_2));
-  assign ram_oeb = !cpu_rnw | cpu_phi1_w | ramoedel_2;
+  (* KEEP="TRUE" *) wire ramoeb_del_1, ramoeb_del_2;
+  BUF    ramoedel1   ( .I(!cpu_rnw | cpu_phi1_w), .O(ramoeb_del_1));
+  BUF    ramoedel2   ( .I(ramoeb_del_1), .O(ramoeb_del_2));
+  `define DELAYOEB ramoeb_del_2
 `elsif DELAY_RAMOEB_BY_3
-  (* KEEP="TRUE" *) wire ramoedel_1_b;
-  (* KEEP="TRUE" *) wire ramoedel_2;
-  (* KEEP="TRUE" *) wire ramoedel_3_b;
-  INV    ramoedel1   ( .I(!cpu_rnw | cpu_phi1_w), .O(ramoedel_1_b));
-  INV    ramoedel2   ( .I(ramoedel_1_b),    .O(ramoedel_2));
-  INV    ramoedel3   ( .I(ramoedel_2), .O(ramoedel_3_b));
-  assign ram_oeb = !cpu_rnw | cpu_phi1_w | !ramoedel_3_b;
-`elsif DELAY_RAMOEB_BY_4
-  (* KEEP="TRUE" *) wire ramoedel_1_b;
-  (* KEEP="TRUE" *) wire ramoedel_2;
-  (* KEEP="TRUE" *) wire ramoedel_3_b;
-  (* KEEP="TRUE" *) wire ramoedel_4;
-  INV    ramoedel1   ( .I(!cpu_rnw | cpu_phi1_w), .O(ramoedel_1_b));
-  INV    ramoedel2   ( .I(ramoedel_1_b),    .O(ramoedel_2));
-  INV    ramoedel3   ( .I(ramoedel_2), .O(ramoedel_3_b));
-  INV    ramoedel4   ( .I(ramoedel_3_b),    .O(ramoedel_4));
-  assign ram_oeb = !cpu_rnw | cpu_phi1_w | ramoedel_4;
+  (* KEEP="TRUE" *) wire ramoeb_del_1, ramoeb_del_2, ramoeb_del_3;
+  BUF    ramoedel1   ( .I(!cpu_rnw | cpu_phi1_w), .O(ramoeb_del_1));
+  BUF    ramoedel2   ( .I(ramoeb_del_1), .O(ramoeb_del_2));
+  BUF    ramoedel3   ( .I(ramoeb_del_2), .O(ramoeb_del_3));
+  `define DELAYOEB ramoeb_del_3
 `else
-  assign ram_oeb = !cpu_rnw | cpu_phi1_w ;
+  `define DELAYOEB 1'b0
 `endif
 
-`ifdef ASSERT_RAMCEB_IN_PHI2
   // All addresses starting 0b11 go to the on-board RAM and 0b10 to IO space, so check just bit 6
-  assign ram_ceb = cpu_phi1_w | !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa)) ;
-`ifdef WRITE_PROTECT_REMAPPED_ROM
-  assign ram_web = cpu_rnw | rom_wr_protect_lat_q ;
-`else
-  assign ram_web = cpu_rnw ;
-`endif
-`else
-  // All addresses starting 0b11 go to the on-board RAM and 0b10 to IO space, so check just bit 6
-  assign ram_ceb = !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa)) ;
-`ifdef WRITE_PROTECT_REMAPPED_ROM
+  assign ram_ceb = (cpu_phi1_w & fast_ram_w) | !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa)) ;
   assign ram_web = cpu_rnw | cpu_phi1_w | rom_wr_protect_lat_q;
-`else
-  assign ram_web = cpu_rnw | cpu_phi1_w;
-`endif
-`endif
+  assign ram_oeb = !cpu_rnw | cpu_phi1_w | (fast_ram_w & `DELAYOEB );
 
   // All addresses starting with 0b10 go to internal IO registers which update on the
   // rising edge of cpu_phi1 - use the cpu_data bus directly for the high address
@@ -263,7 +239,7 @@ module level1b_mk2_m (
   assign bbc_rnw_pre = cpu_rnw | dummy_access_w ;
   BUF    bbc_rnw_0( .I(bbc_rnw_pre), .O(bbc_rnw_del) );
   BUF    bbc_rnw_1( .I(bbc_rnw_del), .O(bbc_rnw_del2) );
-  // Electron needs delay on RNW to reduce xtalk 
+  // Electron needs delay on RNW to reduce xtalk
   assign bbc_rnw = (elk_mode_w & bbc_rnw_del2) | bbc_rnw_pre ;
   assign bbc_data = ( !bbc_rnw & bbc_phi2) ? cpu_data : { 8{1'bz}};
   assign cpu_data = cpu_data_r;
@@ -460,9 +436,7 @@ module level1b_mk2_m (
         cpu_a15_lat_q <= cpu_a15_lat_d;
         cpu_a14_lat_q <= cpu_a14_lat_d;
         himem_vram_wr_lat_q <= himem_vram_wr_d;
-`ifdef WRITE_PROTECT_REMAPPED_ROM
         rom_wr_protect_lat_q <= remapped_mos_access_r|remapped_romCF_access_r ;
-`endif
       end
 
 `ifdef USE_DATA_LATCHES_BBC2CPU
