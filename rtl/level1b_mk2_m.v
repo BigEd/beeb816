@@ -2,8 +2,6 @@
 //
 // Option2 PCB Respin - main CPLD code
 //
-// Interrupts are not handled in '816 mode so leave this undefined for now
-`define REMAP_NATIVE_INTERRUPTS_D 1
 // Depth of pipeline to delay switches to HS clock after an IO access. Need more cycles for
 // faster clocks so ideally this should be linked with the divider setting. Over 16MHz needs
 // 5 cycles but 13.8MHz seems ok with 4. Modified now to count SYNCs rather than cycles
@@ -168,7 +166,7 @@ module level1b_mk2_m (
   INV    ckdel4   ( .I(ckdel_3_b),    .O(ckdel_4));
   clkctrl_phi2 U_0 (
                     .hsclk_in(hsclk),
-                    .lsclk_in(ckdel_1_b),
+                    .lsclk_in(ckdel_3_b),
                     .rst_b(resetb),
                     .hsclk_sel(sel_hs_w),
                     .cpuclk_div_sel(map_data_q[`CLK_CPUCLK_DIV_IDX_HI:`CLK_CPUCLK_DIV_IDX_LO]),
@@ -177,8 +175,8 @@ module level1b_mk2_m (
                     .clkout(cpu_phi1_w)
                     );
 
-  assign bbc_phi1 = ckdel_3_b;
-  assign bbc_phi2 = ckdel_4;
+  assign bbc_phi1 = ckdel_1_b;
+  assign bbc_phi2 = ckdel_2;
 
   assign cpu_phi2_w = !cpu_phi1_w ;
   assign cpu_phi2 =  cpu_phi2_w ;
@@ -191,17 +189,11 @@ module level1b_mk2_m (
   assign tp = { bbc_phi1, cpu_phi2 };
 `endif
 
-
-`ifdef REMAP_NATIVE_INTERRUPTS_D
   // Native mode interrupts will be redirected to himem
   assign native_mode_int_w = !cpu_vpb & !cpu_e ;
-`else
-  assign native_mode_int_w = 1'b0;
-`endif
-
   // Drive the all RAM address pins, allowing for 512K RAM connection
   assign ram_adr = { cpu_hiaddr_lat_q[2:0], cpu_a15_lat_q, cpu_a14_lat_q } ;
-  assign lat_en = !dummy_access_w;
+  assign lat_en = !dummy_access_w; 
 
 `ifdef DELAY_RAMOEB_BY_1
   (* KEEP="TRUE" *) wire ramoedel_1_b;
