@@ -7,16 +7,10 @@
 // 5 cycles but 13.8MHz seems ok with 4. Modified now to count SYNCs rather than cycles
 `define IO_ACCESS_DELAY_SZ     3
 //
-// Define this for BBC B+/Master Shadow RAM control
-`define BPLUS_SHADOW_CTRL 1
-//
-// Use data latches on CPU2BBC and/or BBC2CPU data transfers to improve hold times
-`define USE_DATA_LATCHES_BBC2CPU 1
-//
 // Define this to use fast reads/slow writes to Shadow as with the VRAM to simplify decoding
-//`define CACHED_SHADOW_RAM 1
+`define CACHED_SHADOW_RAM 1
 //
-// Define this to force-keep some clock nets to reduce design size .. but cause slowdown in performance
+// Define this to force-keep some clock nets to reduce design size
 `define FORCE_KEEP_CLOCK 1
 
 // Define to drive clocks to test points tp[1:0]
@@ -25,7 +19,6 @@
 // Define this to disable (and optimize out) Shadow RAM operation - removes a lot of logic when
 // having issues fitting the CPLD but doesn't seem to improve critical paths.
 //`define DISABLE_SHADOW_RAM  1
-
 
 // Set this to force use of FAST SRAM timing (default is to read TP[0] state)
 //`define FAST_SRAM 1
@@ -46,12 +39,8 @@
 `define CLK_CPUCLK_DIV_IDX_LO  0
 `define BBC_PAGEREG_SZ         4    // only the bottom four ROM selection bits
 
-`ifdef BPLUS_SHADOW_CTRL
 `define CPLD_REG_SEL_SZ        3
 `define CPLD_REG_SEL_BBC_SHADOW_IDX 2
-`else
-`define CPLD_REG_SEL_SZ        2
-`endif
 `define CPLD_REG_SEL_MAP_CC_IDX 1
 `define CPLD_REG_SEL_BBC_PAGEREG_IDX 0
 
@@ -94,9 +83,7 @@ module level1b_mk2_m (
   reg                                  mos_vdu_sync_q;
   reg                                  himem_vram_wr_lat_q;
   reg                                  rom_wr_protect_lat_q;
-`ifdef USE_DATA_LATCHES_BBC2CPU
   reg [7:0]                            bbc_data_lat_q;
-`endif
   // This is the internal register controlling which features like high speed clocks etc are enabled
   reg [ `CPLD_REG_SEL_SZ-1:0]           cpld_reg_sel_q;
   wire [ `CPLD_REG_SEL_SZ-1:0]          cpld_reg_sel_d;
@@ -164,11 +151,9 @@ module level1b_mk2_m (
   (* KEEP="TRUE" *) wire ckdel_1_b;
   (* KEEP="TRUE" *) wire ckdel_2;
   (* KEEP="TRUE" *) wire ckdel_3_b;
-  (* KEEP="TRUE" *) wire ckdel_4;
   INV    ckdel1   ( .I(bbc_phi0), .O(ckdel_1_b));
   INV    ckdel2   ( .I(ckdel_1_b),    .O(ckdel_2));
   INV    ckdel3   ( .I(ckdel_2), .O(ckdel_3_b));
-  INV    ckdel4   ( .I(ckdel_3_b),    .O(ckdel_4));
   clkctrl_phi2 U_0 (
                     .hsclk_in(hsclk),
                     .lsclk_in(ckdel_3_b),
@@ -227,9 +212,7 @@ module level1b_mk2_m (
   assign cpld_reg_sel_w = cpld_reg_sel_q;
   assign cpld_reg_sel_d[`CPLD_REG_SEL_MAP_CC_IDX] =  ( cpu_data[7:6]== 2'b10);
   assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = (cpu_data[7]== 1'b0) && dec_rom_reg ;
-`ifdef BPLUS_SHADOW_CTRL
   assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_SHADOW_IDX] = (cpu_data[7]== 1'b0) && dec_shadow_reg ;
-`endif
 
   // Force dummy read access when accessing himem explicitly but not for remapped RAM accesses which can still complete
   assign bbc_adr = { (dummy_access_w) ? 4'b1000 : cpu_adr[15:12] };
@@ -349,11 +332,7 @@ module level1b_mk2_m (
             cpu_data_r = {8{1'bz}};
         end
         else
-`ifdef USE_DATA_LATCHES_BBC2CPU
           cpu_data_r = bbc_data_lat_q;
-`else
-          cpu_data_r = bbc_data;
-`endif
       end
     else
       cpu_data_r = {8{1'bz}};
@@ -383,22 +362,17 @@ module level1b_mk2_m (
         else if (cpld_reg_sel_w[`CPLD_REG_SEL_BBC_PAGEREG_IDX] & !cpu_rnw )
           bbc_pagereg_q <= cpu_data;
 `ifndef DISABLE_SHADOW_RAM
-`ifdef BPLUS_SHADOW_CTRL
         else if (cpld_reg_sel_w[`CPLD_REG_SEL_BBC_SHADOW_IDX] & !cpu_rnw )
           map_data_q[`SHADOW_MEM_IDX] <= cpu_data[`SHADOW_MEM_IDX];
 `endif
-`endif
       end // else: !if( !resetb )
 
-`ifndef NO_SELECT_FLOPS
   // Flop all the internal register sel bits on falling edge of phi1
   always @ ( posedge cpu_phi2_w or negedge resetb )
     if ( !resetb )
         cpld_reg_sel_q <= {`CPLD_REG_SEL_SZ{1'b0}};
     else
         cpld_reg_sel_q <= (rdy & cpu_vda) ? cpld_reg_sel_d : {`CPLD_REG_SEL_SZ{1'b0}};
-`endif
-
 
   // Short pipeline to delay switching back to hs clock after an IO access to ensure any instruction
   // timed delays are respected. This pipeline is initialised to all 1's for force slow clock on startup
@@ -439,11 +413,9 @@ module level1b_mk2_m (
         rom_wr_protect_lat_q <= remapped_mos_access_r|remapped_romCF_access_r ;
       end
 
-`ifdef USE_DATA_LATCHES_BBC2CPU
   // Latches for the BBC data open during PHI2 to be stable beyond cycle end
   always @ ( * )
     if ( !bbc_phi1 )
       bbc_data_lat_q <= bbc_data;
-`endif
 
 endmodule // level1b_m
