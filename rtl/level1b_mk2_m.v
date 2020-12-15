@@ -8,7 +8,7 @@
 `define IO_ACCESS_DELAY_SZ     3
 //
 // Define this to use fast reads/slow writes to Shadow as with the VRAM to simplify decoding
-`define CACHED_SHADOW_RAM 1
+//`define CACHED_SHADOW_RAM 1
 //
 // Define this to force-keep some clock nets to reduce design size
 `define FORCE_KEEP_CLOCK 1
