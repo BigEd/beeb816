@@ -9,6 +9,12 @@
 //
 // Define this to use fast reads/slow writes to Shadow as with the VRAM to simplify decoding
 //`define CACHED_SHADOW_RAM 1
+// Experimental code - defining VRAM to be larger and easier to decode chunks than 20K
+// to see if we can make the SRAM access the critical path rather than the switch decision.
+// Use with CACHED_SHADOW_RAM above
+//`define VRAM_32K
+//`define VRAM_24K
+
 //
 // Define this to force-keep some clock nets to reduce design size
 `define FORCE_KEEP_CLOCK 1
@@ -20,12 +26,11 @@
 // having issues fitting the CPLD but doesn't seem to improve critical paths.
 //`define DISABLE_SHADOW_RAM  1
 
-// Set this to force use of FAST SRAM timing (default is to read TP[0] state)
-//`define FAST_SRAM 1
 // Set one of these to falling edge of RAMOEB by one buffer when running with fast SRAM
 //`define DELAY_RAMOEB_BY_1
 `define DELAY_RAMOEB_BY_2
 //`define DELAY_RAMOEB_BY_3
+
 
 
 `define MAP_CC_DATA_SZ         8
@@ -56,7 +61,7 @@ module level1b_mk2_m (
                       input                hsclk,
                       input                cpu_rnw,
                       input [1:0]          j,
-                      inout [1:0]          tp,
+                      output [1:0]         tp,
                       input                dec_shadow_reg,
                       input                dec_rom_reg,
                       input                dec_fe4x,
@@ -123,7 +128,6 @@ module level1b_mk2_m (
   wire                                 beeb_mode_w;
   wire                                 bplus_mode_w;
   wire                                 master_mode_w;
-  wire                                 fast_ram_w;
 
   // Decode jumpers on J[1:0]
   assign beeb_mode_w = (j==2'b00);
@@ -134,17 +138,6 @@ module level1b_mk2_m (
   // Fast RAM mode set by jumper on tp[0] unless being use as a test point
 `ifdef OBSERVE_CLOCKS
   assign tp = { bbc_phi1, cpu_phi2 };
-  `ifdef FAST_SRAM
-  assign fast_ram_w = 1'b1;
-  `else
-  assign fast_ram_w = 1'b0;
-  `endif
-`else
-  `ifdef FAST_SRAM
-  assign fast_ram_w = 1'b1;
-  `else
-  assign fast_ram_w = tp[0];
-  `endif
 `endif
 
   // Force keep intermediate nets to preserve strict delay chain for clocks
@@ -202,9 +195,10 @@ module level1b_mk2_m (
 `endif
 
   // All addresses starting 0b11 go to the on-board RAM and 0b10 to IO space, so check just bit 6
-  assign ram_ceb = (cpu_phi1_w & fast_ram_w) | !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa)) ;
+  // SRAM is enabled only in PHI2 for best operation with faster SRAM parts
+  assign ram_ceb = cpu_phi1_w | !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa)) ;
   assign ram_web = cpu_rnw | cpu_phi1_w | rom_wr_protect_lat_q;
-  assign ram_oeb = !cpu_rnw | cpu_phi1_w | (fast_ram_w & `DELAYOEB );
+  assign ram_oeb = !cpu_rnw | cpu_phi1_w | `DELAYOEB ;
 
   // All addresses starting with 0b10 go to internal IO registers which update on the
   // rising edge of cpu_phi1 - use the cpu_data bus directly for the high address
@@ -228,8 +222,13 @@ module level1b_mk2_m (
   assign cpu_data = cpu_data_r;
 
   // Identify Video RAM so that in non shadow mode VRAM writes can be slowed down
+`ifdef VRAM_32K
+  assign himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] ;
+`elsif VRAM_24K
+  assign himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | cpu_adr[13])  ;
+`else  
   assign himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | (cpu_adr[13]&cpu_adr[12]))  ;
-
+`endif
   // Check for write accesses to some of IO space (FE4x) in case we need to delay switching back to HS clock
   // so that min pulse widths to sound chip/reading IO are respected
   assign io_access_pipe_d = !cpu_hiaddr_lat_q[7] & dec_fe4x & cpu_vda ;
