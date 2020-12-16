@@ -13,10 +13,6 @@
 // Define to drive clocks to test points tp[1:0]
 //`define OBSERVE_CLOCKS 1
 
-// Define this to disable (and optimize out) Shadow RAM operation - removes a lot of logic when
-// having issues fitting the CPLD but doesn't seem to improve critical paths.
-//`define DISABLE_SHADOW_RAM  1
-
 // Set one of these to falling edge of RAMOEB by one buffer when running with fast SRAM
 //`define DELAY_RAMOEB_BY_1
 `define DELAY_RAMOEB_BY_2
@@ -298,11 +294,7 @@ module level1b_mk2_m (
             // Not all bits are used so assign default first, then individual bits
 	    cpu_data_r = 8'b0  ;
 	    cpu_data_r[`MAP_HSCLK_EN_IDX]      = map_data_q[`MAP_HSCLK_EN_IDX] ;
-`ifdef DISABLE_SHADOW_RAM
-	    cpu_data_r[`SHADOW_MEM_IDX]        = 1'b0;
-`else
 	    cpu_data_r[`SHADOW_MEM_IDX]        = map_data_q[`SHADOW_MEM_IDX];
-`endif
             cpu_data_r[`JUMPER_1_IDX]          = j[1];
             cpu_data_r[`JUMPER_0_IDX]          = j[0];
 	    cpu_data_r[`MAP_ROM_IDX]           = map_data_q[`MAP_ROM_IDX];
@@ -333,19 +325,15 @@ module level1b_mk2_m (
         if (cpld_reg_sel_w[`CPLD_REG_SEL_MAP_CC_IDX] & !cpu_rnw) begin
           // Not all bits are used so assign explicitly
 	  map_data_q[`MAP_HSCLK_EN_IDX]       <= cpu_data[`MAP_HSCLK_EN_IDX] ;
-`ifndef DISABLE_SHADOW_RAM
 	  map_data_q[`SHADOW_MEM_IDX]         <= cpu_data[`SHADOW_MEM_IDX];
-`endif
 	  map_data_q[`MAP_ROM_IDX]            <= cpu_data[`MAP_ROM_IDX];
 	  map_data_q[`CLK_CPUCLK_DIV_IDX_HI]  <= cpu_data[`CLK_CPUCLK_DIV_IDX_HI];
 	  map_data_q[`CLK_CPUCLK_DIV_IDX_LO]  <= cpu_data[`CLK_CPUCLK_DIV_IDX_LO];
         end
         else if (cpld_reg_sel_w[`CPLD_REG_SEL_BBC_PAGEREG_IDX] & !cpu_rnw )
           bbc_pagereg_q <= cpu_data;
-`ifndef DISABLE_SHADOW_RAM
         else if (cpld_reg_sel_w[`CPLD_REG_SEL_BBC_SHADOW_IDX] & !cpu_rnw )
           map_data_q[`SHADOW_MEM_IDX] <= cpu_data[`SHADOW_MEM_IDX];
-`endif
       end // else: !if( !resetb )
 
   // Flop all the internal register sel bits on falling edge of phi1
