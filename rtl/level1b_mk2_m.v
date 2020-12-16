@@ -217,7 +217,7 @@ module level1b_mk2_m (
 
   // Identify Video RAM so that in non shadow mode VRAM writes can be slowed down
   assign himem_vram_wr_d = `VRAM_AREA ;
-  
+
   // Check for write accesses to some of IO space (FE4x) in case we need to delay switching back to HS clock
   // so that min pulse widths to sound chip/reading IO are respected
   assign io_access_pipe_d = !cpu_hiaddr_lat_q[7] & dec_fe4x & cpu_vda ;
@@ -259,15 +259,8 @@ module level1b_mk2_m (
   end
 
   always @ ( * ) begin
-`ifndef DISABLE_SHADOW_RAM
-    if ( map_data_q[`SHADOW_MEM_IDX])
-      // Always remap memory 0-12K in shadow mode, but only remap rest of RAM when not being accessed by MOS VDU routines
-      // remap lomem = 0x0000 - 0x2FFF always              = !a15 & !a14 & !(a13 & a12)
-      remapped_ram_access_r  = `VRAM_AREA | !mos_vdu_sync_q;
-    else
-`endif
-      // Remap all of memory
-      remapped_ram_access_r = !cpu_data[7] & !cpu_adr[15];
+      // Remap all of memory except VRAM area when in shadow mode and when a VDU access is in progress
+      remapped_ram_access_r = !cpu_data[7] & !cpu_adr[15] & !(`VRAM_AREA  & mos_vdu_sync_q) ;
   end
 
   always @ ( * ) begin
@@ -384,11 +377,17 @@ module level1b_mk2_m (
   //    00000000_110xxxxx  (decoded as 0xxxxxxx_110xxxx)
   //
   always @ ( negedge cpu_phi2_w )
-    if ( cpu_vpa & cpu_vda )
-      if ( map_data_q[`MAP_MOS_IDX])
-        mos_vdu_sync_q <= ({cpu_hiaddr_lat_q[7],cpu_hiaddr_lat_q[3:0], cpu_adr[15:13]}==8'b1_1111_110);
+    if ( cpu_vpa & cpu_vda ) begin
+      if ( map_data_q[`SHADOW_MEM_IDX]) begin
+        if ( map_data_q[`MAP_MOS_IDX])
+          mos_vdu_sync_q <= ({cpu_hiaddr_lat_q[7],cpu_hiaddr_lat_q[3:0], cpu_adr[15:13]}==8'b1_1111_110);
+        else
+          mos_vdu_sync_q <= ({cpu_hiaddr_lat_q[7],cpu_adr[15:13]}==4'b0_110);
+      end
       else
-        mos_vdu_sync_q <= ({cpu_hiaddr_lat_q[7],cpu_adr[15:13]}==4'b0_110);
+        // mos_vdu_sync_q always zerod in non-shadow mode
+        mos_vdu_sync_q <= 1'b0;
+    end
 
   // Latches for the high address bits open during PHI1
   always @ ( * )
