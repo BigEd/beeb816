@@ -7,15 +7,6 @@
 // 5 cycles but 13.8MHz seems ok with 4. Modified now to count SYNCs rather than cycles
 `define IO_ACCESS_DELAY_SZ     3
 //
-// Define this to use fast reads/slow writes to Shadow as with the VRAM to simplify decoding
-//`define CACHED_SHADOW_RAM 1
-// Experimental code - defining VRAM to be larger and easier to decode chunks than 20K
-// to see if we can make the SRAM access the critical path rather than the switch decision.
-// Use with CACHED_SHADOW_RAM above
-//`define VRAM_32K
-//`define VRAM_24K
-
-//
 // Define this to force-keep some clock nets to reduce design size
 `define FORCE_KEEP_CLOCK 1
 
@@ -31,7 +22,12 @@
 `define DELAY_RAMOEB_BY_2
 //`define DELAY_RAMOEB_BY_3
 
-
+// Define this to use fast reads/slow writes to Shadow as with the VRAM to simplify decoding
+// `define CACHED_SHADOW_RAM 1
+// Trial code to make VRAM area larger than default of 20K to simplify decoding(can be used with above)
+`define VRAM_AREA_20K          (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | (cpu_adr[13]&cpu_adr[12])))
+`define VRAM_AREA_24K          (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | cpu_adr[13]))
+`define VRAM_AREA              `VRAM_AREA_20K
 
 `define MAP_CC_DATA_SZ         8
 `define SHADOW_MEM_IDX         7
@@ -142,11 +138,9 @@ module level1b_mk2_m (
 
   // Force keep intermediate nets to preserve strict delay chain for clocks
   (* KEEP="TRUE" *) wire ckdel_1_b;
-  (* KEEP="TRUE" *) wire ckdel_2;
   (* KEEP="TRUE" *) wire ckdel_3_b;
   INV    ckdel1   ( .I(bbc_phi0), .O(ckdel_1_b));
-  INV    ckdel2   ( .I(ckdel_1_b),    .O(ckdel_2));
-  INV    ckdel3   ( .I(ckdel_2), .O(ckdel_3_b));
+  BUF    ckdel3   ( .I(ckdel_1_b), .O(ckdel_3_b));
   clkctrl_phi2 U_0 (
                     .hsclk_in(hsclk),
                     .lsclk_in(ckdel_3_b),
@@ -159,7 +153,7 @@ module level1b_mk2_m (
                     );
 
   assign bbc_phi1 = ckdel_1_b;
-  assign bbc_phi2 = ckdel_2;
+  assign bbc_phi2 = !ckdel_1_b;
 
   assign cpu_phi2_w = !cpu_phi1_w ;
   assign cpu_phi2 =  cpu_phi2_w ;
@@ -222,13 +216,8 @@ module level1b_mk2_m (
   assign cpu_data = cpu_data_r;
 
   // Identify Video RAM so that in non shadow mode VRAM writes can be slowed down
-`ifdef VRAM_32K
-  assign himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] ;
-`elsif VRAM_24K
-  assign himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | cpu_adr[13])  ;
-`else  
-  assign himem_vram_wr_d = !cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | (cpu_adr[13]&cpu_adr[12]))  ;
-`endif
+  assign himem_vram_wr_d = `VRAM_AREA ;
+  
   // Check for write accesses to some of IO space (FE4x) in case we need to delay switching back to HS clock
   // so that min pulse widths to sound chip/reading IO are respected
   assign io_access_pipe_d = !cpu_hiaddr_lat_q[7] & dec_fe4x & cpu_vda ;
@@ -274,11 +263,11 @@ module level1b_mk2_m (
     if ( map_data_q[`SHADOW_MEM_IDX])
       // Always remap memory 0-12K in shadow mode, but only remap rest of RAM when not being accessed by MOS VDU routines
       // remap lomem = 0x0000 - 0x2FFF always              = !a15 & !a14 & !(a13 & a12)
-      remapped_ram_access_r  = !cpu_data[7] & !cpu_adr[15] & ( (!cpu_adr[14] & !(cpu_adr[13] & cpu_adr[12])) | !mos_vdu_sync_q);
+      remapped_ram_access_r  = `VRAM_AREA | !mos_vdu_sync_q;
     else
-      // Remap all of memory
 `endif
-      remapped_ram_access_r = (!cpu_data[7] & !cpu_adr[15]);
+      // Remap all of memory
+      remapped_ram_access_r = !cpu_data[7] & !cpu_adr[15];
   end
 
   always @ ( * ) begin
