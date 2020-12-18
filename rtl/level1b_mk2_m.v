@@ -118,16 +118,6 @@ module level1b_mk2_m (
   wire                                 hisync_w;
   wire [ `CPLD_REG_SEL_SZ-1:0]         cpld_reg_sel_w;
 
-  wire                                 elk_mode_w;
-  wire                                 beeb_mode_w;
-  wire                                 bplus_mode_w;
-  wire                                 master_mode_w;
-
-  // Decode jumpers on J[1:0]
-  assign beeb_mode_w = (j==2'b00);
-  assign bplus_mode_w = (j==2'b01);
-  assign elk_mode_w = (j==2'b10);
-  assign master_mode_w = (j==2'b11);
 
   // Fast RAM mode set by jumper on tp[0] unless being use as a test point
 `ifdef OBSERVE_CLOCKS
@@ -208,8 +198,8 @@ module level1b_mk2_m (
   assign bbc_rnw_pre = cpu_rnw | dummy_access_w ;
   BUF    bbc_rnw_0( .I(bbc_rnw_pre), .O(bbc_rnw_del) );
   BUF    bbc_rnw_1( .I(bbc_rnw_del), .O(bbc_rnw_del2) );
-  // Electron needs delay on RNW to reduce xtalk
-  assign bbc_rnw = (elk_mode_w & bbc_rnw_del2) | bbc_rnw_pre ;
+  // Electron needs delay on RNW to reduce xtalk (ok for Beeb too)
+  assign bbc_rnw = bbc_rnw_del2 | bbc_rnw_pre ;
   assign bbc_data = ( !bbc_rnw & bbc_phi2) ? cpu_data : { 8{1'bz}};
   assign cpu_data = cpu_data_r;
 
