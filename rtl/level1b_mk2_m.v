@@ -18,6 +18,10 @@
 `define DELAY_RAMOEB_BY_2
 //`define DELAY_RAMOEB_BY_3
 
+// Defining this should improve speed at cost of additional FFs, but observed speed
+// reduced in testing
+//`define PIPELINE_ROM_CTRL 1
+
 // Define this to use fast reads/slow writes to Shadow as with the VRAM to simplify decoding
 // `define CACHED_SHADOW_RAM 1
 // Trial code to make VRAM area larger than default of 20K to simplify decoding(can be used with above)
@@ -97,8 +101,10 @@ module level1b_mk2_m (
   reg                                  cpu_a14_lat_q;
   reg [7:0]                            cpu_hiaddr_lat_d;
   reg [ `IO_ACCESS_DELAY_SZ-1:0]       io_access_pipe_q;
+`ifdef PIPELINE_ROM_CTRL
   reg                                  map_rom_cf_q;
-  reg                                  map_rom_47_q;  
+  reg                                  map_rom_47_q;
+`endif
   wire                                 io_access_pipe_d;
   wire                                 himem_vram_wr_d;
 
@@ -236,6 +242,7 @@ module level1b_mk2_m (
     remapped_mos_access_r = 0;
     remapped_rom47_access_r = 0;
     remapped_romCF_access_r = 0;
+`ifdef PIPELINE_ROM_CTRL
     if (!cpu_data[7] & cpu_adr[15] & (cpu_vpa|cpu_vda) ) begin
       if (!cpu_adr[14]) begin
         remapped_romCF_access_r = map_rom_cf_q;
@@ -245,6 +252,17 @@ module level1b_mk2_m (
       else
         remapped_mos_access_r = !(&(cpu_adr[13:10])) & map_data_q[`MAP_ROM_IDX];
     end
+`else
+    if (!cpu_data[7] & cpu_adr[15] & (cpu_vpa|cpu_vda) & map_data_q[`MAP_ROM_IDX]) begin
+       if (!cpu_adr[14]) begin
+         remapped_romCF_access_r = (bbc_pagereg_q[3:2] == 2'b11) ;
+         remapped_rom47_access_r = (bbc_pagereg_q[3:2] == 2'b01) ;
+       end
+       // Remap MOS from C000-FBFF only (exclude IO space and vectors)
+       else
+         remapped_mos_access_r = !(&(cpu_adr[13:10]));
+     end
+`endif
   end
 
   always @ ( * ) begin
@@ -271,9 +289,13 @@ module level1b_mk2_m (
       // All remapped ROM slots 4-7 accesses to 8'b1110x100
       // All remapped ROM slots C-F accesses to 8'b1110x101
       if (remapped_rom47_access_r | remapped_romCF_access_r) begin
+`ifdef PIPELINE_ROM_CTRL
         cpu_hiaddr_lat_d = { 6'b1111_11, map_rom_cf_q, map_rom_47_q};
+`else
+        cpu_hiaddr_lat_d = (remapped_rom47_access_r) ? 8'hFD: 8'hFE;
+`endif
         cpu_a15_lat_d = bbc_pagereg_q[1];
-        cpu_a14_lat_d = bbc_pagereg_q[0];      
+        cpu_a14_lat_d = bbc_pagereg_q[0];
       end
     end
   end
@@ -336,6 +358,7 @@ module level1b_mk2_m (
     else
         cpld_reg_sel_q <= (rdy & cpu_vda) ? cpld_reg_sel_d : {`CPLD_REG_SEL_SZ{1'b0}};
 
+`ifdef PIPELINE_ROM_CTRL
     always @ ( negedge cpu_phi2_w or negedge resetb )
       if ( !resetb )
         {map_rom_cf_q, map_rom_47_q}  <= 2'b00;
@@ -343,7 +366,8 @@ module level1b_mk2_m (
         map_rom_cf_q <= map_data_q[`MAP_ROM_IDX] & (bbc_pagereg_q[3:2]==2'b11);
         map_rom_47_q <= map_data_q[`MAP_ROM_IDX] & (bbc_pagereg_q[3:2]==2'b01);
       end
-    
+`endif
+
   // Short pipeline to delay switching back to hs clock after an IO access to ensure any instruction
   // timed delays are respected. This pipeline is initialised to all 1's for force slow clock on startup
   // and will fill with the value of the HS clock enable register as instructions are executed.
