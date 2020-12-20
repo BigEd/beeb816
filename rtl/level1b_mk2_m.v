@@ -29,6 +29,39 @@
 `define VRAM_AREA_24K          (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | cpu_adr[13]))
 `define VRAM_AREA              `VRAM_AREA_20K
 
+// Define this to have the host set the type field in the map register rather than define it by jumpers
+// (And remember to remove the jumpers if setting this !)
+// `define HOST_SET_OWN_TYPE 1
+
+// Define this to bring decoding back into the main CPLD (mainly for capacity evaluation). Note
+// that the address lsb latches are still assumed external to keep the same pin out.
+// `define LOCAL_DECODING 1
+`ifdef LOCAL_DECODING
+  `define ELK_PAGED_ROM_SEL 16'hFE05
+  `define PAGED_ROM_SEL 16'hFE30
+  `define BPLUS_SHADOW_RAM_SEL 16'hFE34
+  // Decode jumpers on J[1:0] or register bits
+  `ifdef HOST_SET_OWN_TYPE
+    `define L1_BEEB_MODE   (map_data_q[`JUMPER_1_IDX:`JUMPER_0_IDX]==2'b00)
+    `define L1_BPLUS_MODE  (map_data_q[`JUMPER_1_IDX:`JUMPER_0_IDX]==2'b01)
+    `define L1_ELK_MODE    (map_data_q[`JUMPER_1_IDX:`JUMPER_0_IDX]==2'b10)
+    `define L1_MASTER_MODE (map_data_q[`JUMPER_1_IDX:`JUMPER_0_IDX]==2'b11)
+  `else
+    `define L1_BEEB_MODE   (j[1:0]==2'b00)
+    `define L1_BPLUS_MODE  (j[1:0]==2'b01)
+    `define L1_ELK_MODE    (j[1:0]==2'b10)
+    `define L1_MASTER_MODE (j[1:0]==2'b11)
+  `endif
+  `define DECODED_SHADOW_REG  ((`L1_BPLUS_MODE) ? (cpu_adr==`BPLUS_SHADOW_RAM_SEL) : 1'b0 )
+  `define DECODED_ROM_REG     ((`L1_ELK_MODE)? (cpu_adr==`ELK_PAGED_ROM_SEL) : (cpu_adr==`PAGED_ROM_SEL))
+  // Flag FE4x (VIA) accesses and also all &FC, &FD expansion pages
+  `define DECODED_FE4X        ((cpu_adr[15:4]==12'hFE4) || (cpu_adr[15:9]==7'b1111_110))
+`else
+  `define DECODED_SHADOW_REG dec_shadow_reg
+  `define DECODED_ROM_REG    dec_rom_reg
+  `define DECODED_FE4X       dec_fe4x
+`endif // !`ifdef LOCAL_DECODING
+
 `define MAP_CC_DATA_SZ         8
 `define SHADOW_MEM_IDX         7
 `define JUMPER_1_IDX           6
@@ -47,36 +80,36 @@
 
 
 module level1b_mk2_m (
-                      input [15:0]         cpu_adr,
-                      input                resetb,
-                      input                cpu_vpb,
-                      input                cpu_e,
-                      input                cpu_vda,
-                      input                cpu_vpa,
-                      input                bbc_phi0,
-                      input                hsclk,
-                      input                cpu_rnw,
-                      input [1:0]          j,
-                      output [1:0]         tp,
-                      input                dec_shadow_reg,
-                      input                dec_rom_reg,
-                      input                dec_fe4x,
-                      inout [7:0]          cpu_data,
-                      inout [7:0]          bbc_data,
-                      input                rdy,
-                      inout                nmib,
-                      inout                irqb,
-                      output               lat_en,
-                      output               ram_web,
-                      output               ram_ceb,
-                      output               ram_oeb,
-                      output [18:14]       ram_adr,
-                      output               bbc_sync,
-                      output [15:12]       bbc_adr,
-                      output               bbc_rnw,
-                      output               bbc_phi1,
-                      output               bbc_phi2,
-                      output               cpu_phi2
+                      input [15:0]   cpu_adr,
+                      input          resetb,
+                      input          cpu_vpb,
+                      input          cpu_e,
+                      input          cpu_vda,
+                      input          cpu_vpa,
+                      input          bbc_phi0,
+                      input          hsclk,
+                      input          cpu_rnw,
+                      inout  [1:0]   j,
+                      output [1:0]   tp,
+                      input          dec_shadow_reg,
+                      input          dec_rom_reg,
+                      input          dec_fe4x,
+                      inout [7:0]    cpu_data,
+                      inout [7:0]    bbc_data,
+                      input          rdy,
+                      inout          nmib,
+                      inout          irqb,
+                      output         lat_en,
+                      output         ram_web,
+                      output         ram_ceb,
+                      output         ram_oeb,
+                      output [18:14] ram_adr,
+                      output         bbc_sync,
+                      output [15:12] bbc_adr,
+                      output         bbc_rnw,
+                      output         bbc_phi1,
+                      output         bbc_phi2,
+                      output         cpu_phi2
 		  );
 
   reg [7:0]                            cpu_hiaddr_lat_q;
@@ -124,6 +157,10 @@ module level1b_mk2_m (
   wire                                 hisync_w;
   wire [ `CPLD_REG_SEL_SZ-1:0]         cpld_reg_sel_w;
 
+
+`ifdef HOST_SET_OWN_TYPE
+  assign j = map_data_q[`JUMPER_1_IDX:`JUMPER_0_IDX];
+`endif
 
   // Fast RAM mode set by jumper on tp[0] unless being use as a test point
 `ifdef OBSERVE_CLOCKS
@@ -193,8 +230,8 @@ module level1b_mk2_m (
   // bits since it's stable by the end of phi1
   assign cpld_reg_sel_w = cpld_reg_sel_q;
   assign cpld_reg_sel_d[`CPLD_REG_SEL_MAP_CC_IDX] =  ( cpu_data[7:6]== 2'b10);
-  assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = (cpu_data[7]== 1'b0) && dec_rom_reg ;
-  assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_SHADOW_IDX] = (cpu_data[7]== 1'b0) && dec_shadow_reg ;
+  assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = (cpu_data[7]== 1'b0) && `DECODED_ROM_REG ;
+  assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_SHADOW_IDX] = (cpu_data[7]== 1'b0) && `DECODED_SHADOW_REG ;
 
   // Force dummy read access when accessing himem explicitly but not for remapped RAM accesses which can still complete
   assign bbc_adr = { (dummy_access_w) ? 4'b1000 : cpu_adr[15:12] };
@@ -214,7 +251,7 @@ module level1b_mk2_m (
 
   // Check for write accesses to some of IO space (FE4x) in case we need to delay switching back to HS clock
   // so that min pulse widths to sound chip/reading IO are respected
-  assign io_access_pipe_d = !cpu_hiaddr_lat_q[7] & dec_fe4x & cpu_vda ;
+  assign io_access_pipe_d = !cpu_hiaddr_lat_q[7] & `DECODED_FE4X & cpu_vda ;
 
   // Sel the high speed clock only
   // * on valid instruction fetches from himem, or
@@ -310,8 +347,13 @@ module level1b_mk2_m (
 	    cpu_data_r = 8'b0  ;
 	    cpu_data_r[`MAP_HSCLK_EN_IDX]      = map_data_q[`MAP_HSCLK_EN_IDX] ;
 	    cpu_data_r[`SHADOW_MEM_IDX]        = map_data_q[`SHADOW_MEM_IDX];
+`ifdef  HOST_SET_OWN_TYPE
+            cpu_data_r[`JUMPER_1_IDX]          = map_data_q[`JUMPER_1_IDX];
+            cpu_data_r[`JUMPER_0_IDX]          = map_data_q[`JUMPER_0_IDX];
+`else
             cpu_data_r[`JUMPER_1_IDX]          = j[1];
             cpu_data_r[`JUMPER_0_IDX]          = j[0];
+`endif
 	    cpu_data_r[`MAP_ROM_IDX]           = map_data_q[`MAP_ROM_IDX];
 	    cpu_data_r[`CLK_CPUCLK_DIV_IDX_HI] = map_data_q[`CLK_CPUCLK_DIV_IDX_HI];
 	    cpu_data_r[`CLK_CPUCLK_DIV_IDX_LO] = map_data_q[`CLK_CPUCLK_DIV_IDX_LO];
@@ -342,6 +384,10 @@ module level1b_mk2_m (
 	  map_data_q[`MAP_HSCLK_EN_IDX]       <= cpu_data[`MAP_HSCLK_EN_IDX] ;
 	  map_data_q[`SHADOW_MEM_IDX]         <= cpu_data[`SHADOW_MEM_IDX];
 	  map_data_q[`MAP_ROM_IDX]            <= cpu_data[`MAP_ROM_IDX];
+`ifdef HOST_SET_OWN_TYPE
+	  map_data_q[`JUMPER_1_IDX]           <= cpu_data[`JUMPER_1_IDX];
+	  map_data_q[`JUMPER_0_IDX]           <= cpu_data[`JUMPER_0_IDX];
+`endif
 	  map_data_q[`CLK_CPUCLK_DIV_IDX_HI]  <= cpu_data[`CLK_CPUCLK_DIV_IDX_HI];
 	  map_data_q[`CLK_CPUCLK_DIV_IDX_LO]  <= cpu_data[`CLK_CPUCLK_DIV_IDX_LO];
         end
