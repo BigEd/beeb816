@@ -23,7 +23,7 @@
 //`define PIPELINE_ROM_CTRL 1
 
 // Define this to use fast reads/slow writes to Shadow as with the VRAM to simplify decoding
-// `define CACHED_SHADOW_RAM 1
+//`define CACHED_SHADOW_RAM 1
 // Trial code to make VRAM area larger than default of 20K to simplify decoding(can be used with above)
 `define VRAM_AREA_20K          (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | (cpu_adr[13]&cpu_adr[12])))
 `define VRAM_AREA_24K          (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | cpu_adr[13]))
@@ -163,7 +163,7 @@ module level1b_mk2_m (
 
   // Fast RAM mode set by jumper on tp[0] unless being use as a test point
 `ifdef OBSERVE_CLOCKS
-  assign tp = { bbc_phi1, cpu_phi2 };
+  assign tp = { sw_rdy_w, cpu_phi2 };
 `endif
 
   // Force keep intermediate nets to preserve strict delay chain for clocks

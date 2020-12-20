@@ -12,7 +12,7 @@
 `define LS_PIPE_SZ 2
 
 // Define this to assert RDY each time a clock switch is made
-`define ASSERT_RDY_ON_CLKSW 1
+//`define ASSERT_RDY_ON_CLKSW 1
 // Define this to use a latch open in second half of clock cycle to allow more time for
 // clock selection decision. If undefined then clock decision is FF'd on leading edge
 // of PHI2
@@ -44,8 +44,8 @@ module clkctrl_phi2(
   assign clkout = (cpuclk_w & hs_enable_q) | (lsclk_in & ls_enable_q);
   assign lsclk_selected = selected_ls_q;
 
-`ifndef ASSERT_RDY_ON_CLKSW
-  assign rdy = ((hsclk_sel == hsclk_selected) & ( !hsclk_sel == lsclk_selected));
+`ifdef ASSERT_RDY_ON_CLKSW
+  assign rdy = (hsclk_sel == hsclk_selected);
 `else
   assign rdy = 1'b1;
 `endif
