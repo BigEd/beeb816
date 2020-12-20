@@ -78,7 +78,6 @@
 `define CPLD_REG_SEL_MAP_CC_IDX 1
 `define CPLD_REG_SEL_BBC_PAGEREG_IDX 0
 
-
 module level1b_mk2_m (
                       input [15:0]   cpu_adr,
                       input          resetb,
@@ -96,7 +95,7 @@ module level1b_mk2_m (
                       input          dec_fe4x,
                       inout [7:0]    cpu_data,
                       inout [7:0]    bbc_data,
-                      input          rdy,
+                      inout          rdy,
                       inout          nmib,
                       inout          irqb,
                       output         lat_en,
@@ -155,8 +154,8 @@ module level1b_mk2_m (
   wire                                 native_mode_int_w;
   wire                                 himem_w;
   wire                                 hisync_w;
+  wire                                 sw_rdy_w;
   wire [ `CPLD_REG_SEL_SZ-1:0]         cpld_reg_sel_w;
-
 
 `ifdef HOST_SET_OWN_TYPE
   assign j = map_data_q[`JUMPER_1_IDX:`JUMPER_0_IDX];
@@ -180,6 +179,7 @@ module level1b_mk2_m (
                     .cpuclk_div_sel(map_data_q[`CLK_CPUCLK_DIV_IDX_HI:`CLK_CPUCLK_DIV_IDX_LO]),
                     .hsclk_selected(hs_selected_w),
                     .lsclk_selected(ls_selected_w),
+                    .rdy(sw_rdy_w),
                     .clkout(cpu_phi1_w)
                     );
 
@@ -192,7 +192,7 @@ module level1b_mk2_m (
   assign bbc_sync = cpu_vpa & cpu_vda;
   assign irqb = 1'bz;
   assign nmib = 1'bz;
-
+  assign rdy = (sw_rdy_w) ? 1'bz : 1'b0;
 
   // Native mode interrupts will be redirected to himem
   assign native_mode_int_w = !cpu_vpb & !cpu_e ;
@@ -222,7 +222,7 @@ module level1b_mk2_m (
   // All addresses starting 0b11 go to the on-board RAM and 0b10 to IO space, so check just bit 6
   // SRAM is enabled only in PHI2 for best operation with faster SRAM parts
   assign ram_ceb = cpu_phi1_w | !(cpu_hiaddr_lat_q[6] & (cpu_vda|cpu_vpa)) ;
-  assign ram_web = cpu_rnw | cpu_phi1_w | rom_wr_protect_lat_q;
+  assign ram_web = cpu_rnw | cpu_phi1_w | rom_wr_protect_lat_q ;
   assign ram_oeb = !cpu_rnw | cpu_phi1_w | `DELAYOEB ;
 
   // All addresses starting with 0b10 go to internal IO registers which update on the
@@ -238,7 +238,7 @@ module level1b_mk2_m (
 
   // Build delay chain for use with Electron to improve xtalk (will be bypassed for other machines)
   (* KEEP="TRUE" *) wire bbc_rnw_pre, bbc_rnw_del, bbc_rnw_del2;
-  assign bbc_rnw_pre = cpu_rnw | dummy_access_w ;
+  assign bbc_rnw_pre = cpu_rnw | dummy_access_w | !sw_rdy_w ;
   BUF    bbc_rnw_0( .I(bbc_rnw_pre), .O(bbc_rnw_del) );
   BUF    bbc_rnw_1( .I(bbc_rnw_del), .O(bbc_rnw_del2) );
   // Electron needs delay on RNW to reduce xtalk (ok for Beeb too)
