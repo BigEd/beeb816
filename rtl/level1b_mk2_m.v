@@ -27,15 +27,21 @@
 // Trial code to make VRAM area larger than default of 20K to simplify decoding(can be used with above)
 `define VRAM_AREA_20K          (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | (cpu_adr[13]&cpu_adr[12])))
 `define VRAM_AREA_24K          (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | cpu_adr[13]))
+`define VRAM_AREA_32K          (!cpu_data[7] & !cpu_adr[15])
 `define VRAM_AREA              `VRAM_AREA_20K
 
 // Define this to have the host set the type field in the map register rather than define it by jumpers
 // (And remember to remove the jumpers if setting this !)
 // `define HOST_SET_OWN_TYPE 1
 
+// Define this to always delay return to HS clock by the selected number of SYNC (fetches) and not
+// just after accessing specific IO areas - causes slight performance loss of ~ 0.3% in CLOCKSP CA,
+// but small reduction in overall CPLD resources (including decoding currently in cpld_jnr)
+//`define ALWAYS_DELAY_SWITCH_TO_HS 1
+
 // Define this to bring decoding back into the main CPLD (mainly for capacity evaluation). Note
 // that the address lsb latches are still assumed external to keep the same pin out.
-// `define LOCAL_DECODING 1
+//`define LOCAL_DECODING 1
 `ifdef LOCAL_DECODING
   `define ELK_PAGED_ROM_SEL 16'hFE05
   `define PAGED_ROM_SEL 16'hFE30
@@ -234,7 +240,7 @@ module level1b_mk2_m (
   assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_SHADOW_IDX] = (cpu_data[7]== 1'b0) && `DECODED_SHADOW_REG ;
 
   // Force dummy read access when accessing himem explicitly but not for remapped RAM accesses which can still complete
-  assign bbc_adr = { (dummy_access_w) ? 4'b1000 : cpu_adr[15:12] };
+  assign bbc_adr = { (dummy_access_w) ? 4'b1100 : cpu_adr[15:12] };
 
   // Build delay chain for use with Electron to improve xtalk (will be bypassed for other machines)
   (* KEEP="TRUE" *) wire bbc_rnw_pre, bbc_rnw_del, bbc_rnw_del2;
@@ -271,7 +277,6 @@ module level1b_mk2_m (
                      ) ;
 
   assign dummy_access_w =  himem_w | !ls_selected_w ;
-
 
   // ROM remapping
   always @ ( * ) begin
@@ -421,8 +426,13 @@ module level1b_mk2_m (
     if ( !resetb )
       io_access_pipe_q <= {`IO_ACCESS_DELAY_SZ{1'b1}};
     else begin
+`ifdef ALWAYS_DELAY_SWITCH_TO_HS
+      if (!cpu_hiaddr_lat_q[7] & (cpu_vda|cpu_vpa) & rdy)
+        io_access_pipe_q <= {`IO_ACCESS_DELAY_SZ{1'b1}};
+`else
       if (io_access_pipe_d )
         io_access_pipe_q <= {`IO_ACCESS_DELAY_SZ{1'b1}};
+`endif
       else if ( cpu_vpa & cpu_vda & rdy )
         io_access_pipe_q <= { !map_data_q[`MAP_HSCLK_EN_IDX], io_access_pipe_q[`IO_ACCESS_DELAY_SZ-2:1] } ;
     end
