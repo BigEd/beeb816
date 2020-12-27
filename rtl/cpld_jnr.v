@@ -1,4 +1,3 @@
-
 `timescale 1ns / 1ns
 
 // Define this to get the original behaviour of the 74373 on the Mark2 board latching

@@ -46,18 +46,6 @@
   `define ELK_PAGED_ROM_SEL 16'hFE05
   `define PAGED_ROM_SEL 16'hFE30
   `define BPLUS_SHADOW_RAM_SEL 16'hFE34
-  // Decode jumpers on J[1:0] or register bits
-  `ifdef HOST_SET_OWN_TYPE
-    `define L1_BEEB_MODE   (map_data_q[`JUMPER_1_IDX:`JUMPER_0_IDX]==2'b00)
-    `define L1_BPLUS_MODE  (map_data_q[`JUMPER_1_IDX:`JUMPER_0_IDX]==2'b01)
-    `define L1_ELK_MODE    (map_data_q[`JUMPER_1_IDX:`JUMPER_0_IDX]==2'b10)
-    `define L1_MASTER_MODE (map_data_q[`JUMPER_1_IDX:`JUMPER_0_IDX]==2'b11)
-  `else
-    `define L1_BEEB_MODE   (j[1:0]==2'b00)
-    `define L1_BPLUS_MODE  (j[1:0]==2'b01)
-    `define L1_ELK_MODE    (j[1:0]==2'b10)
-    `define L1_MASTER_MODE (j[1:0]==2'b11)
-  `endif
   `define DECODED_SHADOW_REG  ((`L1_BPLUS_MODE) ? (cpu_adr==`BPLUS_SHADOW_RAM_SEL) : 1'b0 )
   `define DECODED_ROM_REG     ((`L1_ELK_MODE)? (cpu_adr==`ELK_PAGED_ROM_SEL) : (cpu_adr==`PAGED_ROM_SEL))
   // Flag FE4x (VIA) accesses and also all &FC, &FD expansion pages
@@ -67,6 +55,19 @@
   `define DECODED_ROM_REG    dec_rom_reg
   `define DECODED_FE4X       dec_fe4x
 `endif // !`ifdef LOCAL_DECODING
+
+// Decode jumpers on J[1:0] or register bits
+`ifdef HOST_SET_OWN_TYPE
+  `define L1_BEEB_MODE   (map_data_q[`JUMPER_1_IDX:`JUMPER_0_IDX]==2'b00)
+  `define L1_BPLUS_MODE  (map_data_q[`JUMPER_1_IDX:`JUMPER_0_IDX]==2'b01)
+  `define L1_ELK_MODE    (map_data_q[`JUMPER_1_IDX:`JUMPER_0_IDX]==2'b10)
+  `define L1_MASTER_MODE (map_data_q[`JUMPER_1_IDX:`JUMPER_0_IDX]==2'b11)
+`else
+  `define L1_BEEB_MODE   (j[1:0]==2'b00)
+  `define L1_BPLUS_MODE  (j[1:0]==2'b01)
+  `define L1_ELK_MODE    (j[1:0]==2'b10)
+  `define L1_MASTER_MODE (j[1:0]==2'b11)
+`endif
 
 `define MAP_CC_DATA_SZ         8
 `define SHADOW_MEM_IDX         7
@@ -243,12 +244,13 @@ module level1b_mk2_m (
   assign bbc_adr = { (dummy_access_w) ? 4'b1100 : cpu_adr[15:12] };
 
   // Build delay chain for use with Electron to improve xtalk (will be bypassed for other machines)
+  
   (* KEEP="TRUE" *) wire bbc_rnw_pre, bbc_rnw_del, bbc_rnw_del2;
-  assign bbc_rnw_pre = cpu_rnw | dummy_access_w | !sw_rdy_w ;
+  assign bbc_rnw_pre = cpu_rnw | dummy_access_w ;
   BUF    bbc_rnw_0( .I(bbc_rnw_pre), .O(bbc_rnw_del) );
   BUF    bbc_rnw_1( .I(bbc_rnw_del), .O(bbc_rnw_del2) );
   // Electron needs delay on RNW to reduce xtalk (ok for Beeb too)
-  assign bbc_rnw = bbc_rnw_del2 | bbc_rnw_pre ;
+  assign bbc_rnw = (`L1_ELK_MODE) ? (bbc_rnw_del2 | bbc_rnw_pre) : bbc_rnw_pre ;
   assign bbc_data = ( !bbc_rnw & bbc_phi2) ? cpu_data : { 8{1'bz}};
   assign cpu_data = cpu_data_r;
 
