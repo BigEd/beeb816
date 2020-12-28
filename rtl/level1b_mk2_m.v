@@ -22,6 +22,11 @@
 // reduced in testing
 //`define PIPELINE_ROM_CTRL 1
 
+// Define this to add a simple deglitch circuit to the incoming BBC clock ahead of the
+// clock switch
+`define DEGLITCH_CLOCK_IN 1
+
+
 // Define this to use fast reads/slow writes to Shadow as with the VRAM to simplify decoding
 //`define CACHED_SHADOW_RAM 1
 // Trial code to make VRAM area larger than default of 20K to simplify decoding(can be used with above)
@@ -177,7 +182,15 @@ module level1b_mk2_m (
   (* KEEP="TRUE" *) wire ckdel_1_b;
   (* KEEP="TRUE" *) wire ckdel_3_b;
   INV    ckdel1   ( .I(bbc_phi0), .O(ckdel_1_b));
+`ifdef DEGLITCH_CLOCK_IN
+  // Deglitch PHI0 input for feeding to clock switch only
+  (* KEEP="TRUE" *) wire ckdel_2 ;
+  INV    ckdel2   ( .I(ckdel_1_b), .O(ckdel_2));
+  assign ckdel_3_b = !(ckdel_2 & bbc_phi0);
+`else
   BUF    ckdel3   ( .I(ckdel_1_b), .O(ckdel_3_b));
+`endif
+
   clkctrl_phi2 U_0 (
                     .hsclk_in(hsclk),
                     .lsclk_in(ckdel_3_b),
@@ -244,7 +257,7 @@ module level1b_mk2_m (
   assign bbc_adr = { (dummy_access_w) ? 4'b1100 : cpu_adr[15:12] };
 
   // Build delay chain for use with Electron to improve xtalk (will be bypassed for other machines)
-  
+
   (* KEEP="TRUE" *) wire bbc_rnw_pre, bbc_rnw_del, bbc_rnw_del2;
   assign bbc_rnw_pre = cpu_rnw | dummy_access_w ;
   BUF    bbc_rnw_0( .I(bbc_rnw_pre), .O(bbc_rnw_del) );
