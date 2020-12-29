@@ -110,7 +110,11 @@ module clkctrl_phi2(
     if ( hs_enable_q )
       pipe_retime_hs_enable_q <= {`LS_PIPE_SZ{1'b1}};
     else
+`ifdef SINGLE_LS_RETIMER
+      pipe_retime_hs_enable_q <= {`LS_PIPE_SZ{hsclk_sel}};
+`else
       pipe_retime_hs_enable_q <= {hsclk_sel, pipe_retime_hs_enable_q[`LS_PIPE_SZ-1:1]};
+`endif
 
   // Clock Dividers
   always @ ( posedge hsclk_in  or negedge rst_b)
