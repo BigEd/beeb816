@@ -3,7 +3,8 @@
 
 // Number of retiming steps of fast clock for low speed clock enable. Found N=2 to be
 // unreliable, but N=3 seems ok in testing ... so use N=4 since it has negligible
-// impact on cycle by cycle performance.
+// impact on cycle by cycle performance. (NB depth of pipeline must be >= 1 phase of slow clock
+// for correct logical operation.)
 `define HS_PIPE_SZ 4
 
 // Number of retiming steps of slow clock for hs clock enable, N must be >= 2
