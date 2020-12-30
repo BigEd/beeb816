@@ -168,6 +168,7 @@ module level1b_mk2_m (
   wire                                 hisync_w;
   wire                                 sw_rdy_w;
   wire [ `CPLD_REG_SEL_SZ-1:0]         cpld_reg_sel_w;
+  wire                                 ckdel_w;
 
 `ifdef HOST_SET_OWN_TYPE
   assign j = map_data_q[`JUMPER_1_IDX:`JUMPER_0_IDX];
@@ -178,22 +179,32 @@ module level1b_mk2_m (
   assign tp = { sw_rdy_w, cpu_phi2 };
 `endif
 
-  // Force keep intermediate nets to preserve strict delay chain for clocks
-  (* KEEP="TRUE" *) wire ckdel_1_b;
-  (* KEEP="TRUE" *) wire ckdel_3_b;
-  INV    ckdel1   ( .I(bbc_phi0), .O(ckdel_1_b));
+  
 `ifdef DEGLITCH_CLOCK_IN
   // Deglitch PHI0 input for feeding to clock switch only
-  (* KEEP="TRUE" *) wire ckdel_2 ;
+  (* KEEP="TRUE" *) wire ckdel_1_b;  
+  (* KEEP="TRUE" *) wire ckdel_2;
+  (* KEEP="TRUE" *) wire ckdel_3;
+  (* KEEP="TRUE" *) wire ckdel_4;
+  INV    ckdel0   ( .I(bbc_phi0), .O(ckdel_1_b));  
   INV    ckdel2   ( .I(ckdel_1_b), .O(ckdel_2));
-  assign ckdel_3_b = !(ckdel_2 & bbc_phi0);
+  BUF    ckdel3   ( .I(ckdel_2), .O(ckdel_3));
+  BUF    ckdel4   ( .I(ckdel_3), .O(ckdel_4));
+  assign ckdel_w = !(ckdel_2 & ckdel_4);
 `else
-  BUF    ckdel3   ( .I(ckdel_1_b), .O(ckdel_3_b));
+  // Force keep intermediate nets to preserve strict delay chain for clocks
+  (* KEEP="TRUE" *) wire ckdel_1_b;
+  (* KEEP="TRUE" *) wire ckdel_2;
+  (* KEEP="TRUE" *) wire ckdel_3_b;
+  INV    ckdel1   ( .I(bbc_phi0), .O(ckdel_1_b));
+  INV    ckdel2   ( .I(ckdel_1_b), .O(ckdel_2));
+  INV    ckdel3   ( .I(ckdel_2), .O(ckdel_3_b));
+  assign ckdel_w = ckdel_3_b;
 `endif
 
   clkctrl_phi2 U_0 (
                     .hsclk_in(hsclk),
-                    .lsclk_in(ckdel_3_b),
+                    .lsclk_in(ckdel_w),
                     .rst_b(resetb),
                     .hsclk_sel(sel_hs_w),
                     .cpuclk_div_sel(map_data_q[`CLK_CPUCLK_DIV_IDX_HI:`CLK_CPUCLK_DIV_IDX_LO]),
