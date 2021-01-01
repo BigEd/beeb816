@@ -149,6 +149,7 @@ module level1b_mk2_m (
   reg                                  map_rom_cf_q;
   reg                                  map_rom_47_q;
 `endif
+  reg                                  rdy_q;
   wire                                 io_access_pipe_d;
   wire                                 himem_vram_wr_d;
 
@@ -179,14 +180,14 @@ module level1b_mk2_m (
   assign tp = { sw_rdy_w, cpu_phi2 };
 `endif
 
-  
+
 `ifdef DEGLITCH_CLOCK_IN
   // Deglitch PHI0 input for feeding to clock switch only
-  (* KEEP="TRUE" *) wire ckdel_1_b;  
+  (* KEEP="TRUE" *) wire ckdel_1_b;
   (* KEEP="TRUE" *) wire ckdel_2;
   (* KEEP="TRUE" *) wire ckdel_3;
   (* KEEP="TRUE" *) wire ckdel_4;
-  INV    ckdel0   ( .I(bbc_phi0), .O(ckdel_1_b));  
+  INV    ckdel0   ( .I(bbc_phi0), .O(ckdel_1_b));
   INV    ckdel2   ( .I(ckdel_1_b), .O(ckdel_2));
   BUF    ckdel3   ( .I(ckdel_2), .O(ckdel_3));
   BUF    ckdel4   ( .I(ckdel_3), .O(ckdel_4));
@@ -428,12 +429,16 @@ module level1b_mk2_m (
           map_data_q[`SHADOW_MEM_IDX] <= cpu_data[`SHADOW_MEM_IDX];
       end // else: !if( !resetb )
 
+  // Sample Rdy at the start of the cycle, so it remains stable for the remainder of the cycle
+  always @ ( negedge cpu_phi2_w)
+    rdy_q <= rdy;
+
   // Flop all the internal register sel bits on falling edge of phi1
   always @ ( posedge cpu_phi2_w or negedge resetb )
     if ( !resetb )
         cpld_reg_sel_q <= {`CPLD_REG_SEL_SZ{1'b0}};
     else
-        cpld_reg_sel_q <= (rdy & cpu_vda) ? cpld_reg_sel_d : {`CPLD_REG_SEL_SZ{1'b0}};
+        cpld_reg_sel_q <= (rdy_q & cpu_vda) ? cpld_reg_sel_d : {`CPLD_REG_SEL_SZ{1'b0}};
 
 `ifdef PIPELINE_ROM_CTRL
     always @ ( negedge cpu_phi2_w or negedge resetb )
@@ -486,7 +491,7 @@ module level1b_mk2_m (
 
   // Latches for the high address bits open during PHI1
   always @ ( * )
-    if ( rdy & !cpu_phi2_w )
+    if ( rdy & rdy_q & !cpu_phi2_w )
       begin
         cpu_hiaddr_lat_q <= cpu_hiaddr_lat_d ;
         cpu_a15_lat_q <= cpu_a15_lat_d;
