@@ -28,9 +28,6 @@ ${BUILD_SCR}  \
     -m ${design} \
     -d build_${target}_p3_ff \
     -f -t ${target}  \
-    -c ${design}.ucf -o speed 
+    -c ${design}.ucf -o speed
 # mv build_${target}_p3_ff/${design}.jed ./${design}_${defines}.jed
 #    -a "cpldfit: -pterms 12" \
-
-
-
