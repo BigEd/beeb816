@@ -22,18 +22,24 @@
 // reduced in testing
 //`define PIPELINE_ROM_CTRL 1
 
+// Define this to remove Elk and Master compatibility - e.g. no use of RDY signal on 6502
+//`define BBC_MICRO_ONLY 1
+
 // Define this to add a simple deglitch circuit to the incoming BBC clock ahead of the
 // clock switch
-`define DEGLITCH_CLOCK_IN 1
-
+`ifndef BBC_MICRO_ONLY
+  `define DEGLITCH_CLOCK_IN 1
+`endif
 
 // Define this to use fast reads/slow writes to Shadow as with the VRAM to simplify decoding
 //`define CACHED_SHADOW_RAM 1
 // Trial code to make VRAM area larger than default of 20K to simplify decoding(can be used with above)
 `define VRAM_AREA_20K          (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | (cpu_adr[13]&cpu_adr[12])))
 `define VRAM_AREA_24K          (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | cpu_adr[13]))
-`define VRAM_AREA_32K          (!cpu_data[7] & !cpu_adr[15])
-`define VRAM_AREA              `VRAM_AREA_20K
+`define VRAM_AREA_28K          (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | cpu_adr[13]| cpu_adr[12]))
+`define VRAM_AREA_30K          (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | cpu_adr[13]| cpu_adr[12] | cpu_adr[11]))
+`define VRAM_AREA_20K_N_30K    (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | ((map_data_q[`MAP_VRAM_SZ_IDX])? (cpu_adr[13]&cpu_adr[12]) : (cpu_adr[13]| cpu_adr[12] | cpu_adr[11]))))
+`define VRAM_AREA              `VRAM_AREA_20K_N_30K
 
 // Define this to have the host set the type field in the map register rather than define it by jumpers
 // (And remember to remove the jumpers if setting this !)
@@ -52,7 +58,11 @@
   `define PAGED_ROM_SEL 16'hFE30
   `define BPLUS_SHADOW_RAM_SEL 16'hFE34
   `define DECODED_SHADOW_REG  ((`L1_BPLUS_MODE) ? (cpu_adr==`BPLUS_SHADOW_RAM_SEL) : 1'b0 )
-  `define DECODED_ROM_REG     ((`L1_ELK_MODE)? (cpu_adr==`ELK_PAGED_ROM_SEL) : (cpu_adr==`PAGED_ROM_SEL))
+  `ifdef BBC_MICRO_ONLY
+    `define DECODED_ROM_REG     1'b0;
+  `else
+    `define DECODED_ROM_REG     ((`L1_ELK_MODE)? (cpu_adr==`ELK_PAGED_ROM_SEL) : (cpu_adr==`PAGED_ROM_SEL))
+  `endif
   // Flag FE4x (VIA) accesses and also all &FC, &FD expansion pages
   `define DECODED_FE4X        ((cpu_adr[15:4]==12'hFE4) || (cpu_adr[15:9]==7'b1111_110))
 `else
@@ -80,6 +90,7 @@
 `define JUMPER_0_IDX           5
 `define MAP_ROM_IDX            4
 `define MAP_MOS_IDX          `MAP_ROM_IDX
+`define MAP_VRAM_SZ_IDX        3
 `define MAP_HSCLK_EN_IDX       2
 `define CLK_CPUCLK_DIV_IDX_HI  1
 `define CLK_CPUCLK_DIV_IDX_LO  0
@@ -149,7 +160,10 @@ module level1b_mk2_m (
   reg                                  map_rom_cf_q;
   reg                                  map_rom_47_q;
 `endif
+
+`ifndef BBC_MICRO_ONLY
   reg                                  rdy_q;
+`endif
   wire                                 io_access_pipe_d;
   wire                                 himem_vram_wr_d;
 
@@ -224,7 +238,12 @@ module level1b_mk2_m (
   assign bbc_sync = cpu_vpa & cpu_vda;
   assign irqb = 1'bz;
   assign nmib = 1'bz;
+
+`ifdef BBC_MICRO_ONLY
+  assign rdy =  1'bz;
+`else
   assign rdy = (sw_rdy_w) ? 1'bz : 1'b0;
+`endif
 
   // Native mode interrupts will be redirected to himem
   assign native_mode_int_w = !cpu_vpb & !cpu_e ;
@@ -275,7 +294,11 @@ module level1b_mk2_m (
   BUF    bbc_rnw_0( .I(bbc_rnw_pre), .O(bbc_rnw_del) );
   BUF    bbc_rnw_1( .I(bbc_rnw_del), .O(bbc_rnw_del2) );
   // Electron needs delay on RNW to reduce xtalk (ok for Beeb too)
+`ifdef BBC_MICRO_ONLY
+  assign bbc_rnw = bbc_rnw_pre ;
+`else
   assign bbc_rnw = (`L1_ELK_MODE) ? (bbc_rnw_del2 | bbc_rnw_pre) : bbc_rnw_pre ;
+`endif
   assign bbc_data = ( !bbc_rnw & bbc_phi2) ? cpu_data : { 8{1'bz}};
   assign cpu_data = cpu_data_r;
 
@@ -378,6 +401,7 @@ module level1b_mk2_m (
             // Not all bits are used so assign default first, then individual bits
 	    cpu_data_r = 8'b0  ;
 	    cpu_data_r[`MAP_HSCLK_EN_IDX]      = map_data_q[`MAP_HSCLK_EN_IDX] ;
+	    cpu_data_r[`MAP_VRAM_SZ_IDX]       = map_data_q[`MAP_VRAM_SZ_IDX] ;
 	    cpu_data_r[`SHADOW_MEM_IDX]        = map_data_q[`SHADOW_MEM_IDX];
 `ifdef  HOST_SET_OWN_TYPE
             cpu_data_r[`JUMPER_1_IDX]          = map_data_q[`JUMPER_1_IDX];
@@ -415,6 +439,7 @@ module level1b_mk2_m (
           // Not all bits are used so assign explicitly
 	  map_data_q[`MAP_HSCLK_EN_IDX]       <= cpu_data[`MAP_HSCLK_EN_IDX] ;
 	  map_data_q[`SHADOW_MEM_IDX]         <= cpu_data[`SHADOW_MEM_IDX];
+	  map_data_q[`MAP_VRAM_SZ_IDX]        <= cpu_data[`MAP_VRAM_SZ_IDX];
 	  map_data_q[`MAP_ROM_IDX]            <= cpu_data[`MAP_ROM_IDX];
 `ifdef HOST_SET_OWN_TYPE
 	  map_data_q[`JUMPER_1_IDX]           <= cpu_data[`JUMPER_1_IDX];
@@ -429,16 +454,22 @@ module level1b_mk2_m (
           map_data_q[`SHADOW_MEM_IDX] <= cpu_data[`SHADOW_MEM_IDX];
       end // else: !if( !resetb )
 
+`ifndef BBC_MICRO_ONLY
   // Sample Rdy at the start of the cycle, so it remains stable for the remainder of the cycle
   always @ ( negedge cpu_phi2_w)
     rdy_q <= rdy;
+`endif
 
   // Flop all the internal register sel bits on falling edge of phi1
   always @ ( posedge cpu_phi2_w or negedge resetb )
     if ( !resetb )
         cpld_reg_sel_q <= {`CPLD_REG_SEL_SZ{1'b0}};
     else
+`ifdef BBC_MICRO_ONLY
+        cpld_reg_sel_q <= (cpu_vda) ? cpld_reg_sel_d : {`CPLD_REG_SEL_SZ{1'b0}};
+`else
         cpld_reg_sel_q <= (rdy_q & cpu_vda) ? cpld_reg_sel_d : {`CPLD_REG_SEL_SZ{1'b0}};
+`endif
 
 `ifdef PIPELINE_ROM_CTRL
     always @ ( negedge cpu_phi2_w or negedge resetb )
@@ -458,13 +489,21 @@ module level1b_mk2_m (
       io_access_pipe_q <= {`IO_ACCESS_DELAY_SZ{1'b1}};
     else begin
 `ifdef ALWAYS_DELAY_SWITCH_TO_HS
+  `ifdef BBC_MICRO_ONLY
+      if (!cpu_hiaddr_lat_q[7] & (cpu_vda|cpu_vpa))
+  `else
       if (!cpu_hiaddr_lat_q[7] & (cpu_vda|cpu_vpa) & rdy)
+  `endif
         io_access_pipe_q <= {`IO_ACCESS_DELAY_SZ{1'b1}};
 `else
       if (io_access_pipe_d )
         io_access_pipe_q <= {`IO_ACCESS_DELAY_SZ{1'b1}};
+`endif // !`ifdef ALWAYS_DELAY_SWITCH_TO_HS
+`ifdef BBC_MICRO_ONLY
+      else if ( cpu_vpa & cpu_vda)
+`else
+      else if ( cpu_vpa & cpu_vda & rdy)
 `endif
-      else if ( cpu_vpa & cpu_vda & rdy )
         io_access_pipe_q <= { !map_data_q[`MAP_HSCLK_EN_IDX], io_access_pipe_q[`IO_ACCESS_DELAY_SZ-2:1] } ;
     end
   end
@@ -491,7 +530,11 @@ module level1b_mk2_m (
 
   // Latches for the high address bits open during PHI1
   always @ ( * )
+`ifdef BBC_MICRO_ONLY
+    if ( !cpu_phi2_w )
+`else
     if ( rdy & rdy_q & !cpu_phi2_w )
+`endif
       begin
         cpu_hiaddr_lat_q <= cpu_hiaddr_lat_d ;
         cpu_a15_lat_q <= cpu_a15_lat_d;
