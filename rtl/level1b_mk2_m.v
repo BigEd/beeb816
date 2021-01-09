@@ -31,15 +31,21 @@
   `define DEGLITCH_CLOCK_IN 1
 `endif
 
+// Define this to enable VRAM size change by programming one bit of the internal register
+`define VARIABLE_VRAM 1
+
 // Define this to use fast reads/slow writes to Shadow as with the VRAM to simplify decoding
 //`define CACHED_SHADOW_RAM 1
 // Trial code to make VRAM area larger than default of 20K to simplify decoding(can be used with above)
 `define VRAM_AREA_20K          (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | (cpu_adr[13]&cpu_adr[12])))
-`define VRAM_AREA_24K          (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | cpu_adr[13]))
-`define VRAM_AREA_28K          (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | cpu_adr[13]| cpu_adr[12]))
 `define VRAM_AREA_30K          (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | cpu_adr[13]| cpu_adr[12] | cpu_adr[11]))
 `define VRAM_AREA_20K_N_30K    (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | ((map_data_q[`MAP_VRAM_SZ_IDX])? (cpu_adr[13]&cpu_adr[12]) : (cpu_adr[13]| cpu_adr[12] | cpu_adr[11]))))
-`define VRAM_AREA              `VRAM_AREA_20K_N_30K
+`define VRAM_AREA_20K_N_31K    (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | ((map_data_q[`MAP_VRAM_SZ_IDX])? (cpu_adr[13]&cpu_adr[12]) : (cpu_adr[13]| cpu_adr[12] | cpu_adr[11] | cpu_adr[10]))))
+`ifdef VARIABLE_VRAM
+  `define VRAM_AREA              `VRAM_AREA_20K_N_31K
+`else
+  `define VRAM_AREA              `VRAM_AREA_20K
+`endif
 
 // Define this to have the host set the type field in the map register rather than define it by jumpers
 // (And remember to remove the jumpers if setting this !)
@@ -94,8 +100,8 @@
 `define MAP_HSCLK_EN_IDX       2
 `define CLK_CPUCLK_DIV_IDX_HI  1
 `define CLK_CPUCLK_DIV_IDX_LO  0
-`define BBC_PAGEREG_SZ         4    // only the bottom four ROM selection bits
 
+`define BBC_PAGEREG_SZ         4    // only the bottom four ROM selection bits
 `define CPLD_REG_SEL_SZ        3
 `define CPLD_REG_SEL_BBC_SHADOW_IDX 2
 `define CPLD_REG_SEL_MAP_CC_IDX 1
