@@ -3,7 +3,7 @@
 [Default]
 
   ; routing grid of 5mil may require 0.010 width and spacing
-  RoutingGrid     = 5 mil
+  RoutingGrid     = 10 mil
 
   ; Trace Parameters:
 
