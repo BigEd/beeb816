@@ -22,30 +22,22 @@
 // reduced in testing
 //`define PIPELINE_ROM_CTRL 1
 
-// Define this to remove Elk and Master compatibility - e.g. no use of RDY signal on 6502
-//`define BBC_MICRO_ONLY 1
-
 // Define this to add a simple deglitch circuit to the incoming BBC clock ahead of the
 // clock switch
-`ifndef BBC_MICRO_ONLY
-  `define DEGLITCH_CLOCK_IN 1
-`endif
+`define DEGLITCH_CLOCK_IN 1
 
-// Define this to enable VRAM size change by programming one bit of the internal register
-`define VARIABLE_VRAM 1
+// Define this for Master RAM overlay at 8000
+//`define MASTER_RAM_8000 1
+
+// Define this for Master RAM overlay at C000
+// `define MASTER_RAM_C000 1
 
 // Define this to use fast reads/slow writes to Shadow as with the VRAM to simplify decoding
 //`define CACHED_SHADOW_RAM 1
 // Trial code to make VRAM area larger than default of 20K to simplify decoding(can be used with above)
 `define VRAM_AREA_20K          (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | (cpu_adr[13]&cpu_adr[12])))
-`define VRAM_AREA_30K          (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | cpu_adr[13]| cpu_adr[12] | cpu_adr[11]))
-`define VRAM_AREA_20K_N_30K    (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | ((map_data_q[`MAP_VRAM_SZ_IDX])? (cpu_adr[13]&cpu_adr[12]) : (cpu_adr[13]| cpu_adr[12] | cpu_adr[11]))))
 `define VRAM_AREA_20K_N_31K    (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | ((map_data_q[`MAP_VRAM_SZ_IDX])? (cpu_adr[13]&cpu_adr[12]) : (cpu_adr[13]| cpu_adr[12] | cpu_adr[11] | cpu_adr[10]))))
-`ifdef VARIABLE_VRAM
-  `define VRAM_AREA              `VRAM_AREA_20K_N_31K
-`else
-  `define VRAM_AREA              `VRAM_AREA_20K
-`endif
+`define VRAM_AREA              `VRAM_AREA_20K_N_31K
 
 // Define this to have the host set the type field in the map register rather than define it by jumpers
 // (And remember to remove the jumpers if setting this !)
@@ -64,11 +56,7 @@
   `define PAGED_ROM_SEL 16'hFE30
   `define BPLUS_SHADOW_RAM_SEL 16'hFE34
   `define DECODED_SHADOW_REG  ((`L1_BPLUS_MODE) ? (cpu_adr==`BPLUS_SHADOW_RAM_SEL) : 1'b0 )
-  `ifdef BBC_MICRO_ONLY
-    `define DECODED_ROM_REG     1'b0;
-  `else
-    `define DECODED_ROM_REG     ((`L1_ELK_MODE)? (cpu_adr==`ELK_PAGED_ROM_SEL) : (cpu_adr==`PAGED_ROM_SEL))
-  `endif
+  `define DECODED_ROM_REG     ((`L1_ELK_MODE)? (cpu_adr==`ELK_PAGED_ROM_SEL) : (cpu_adr==`PAGED_ROM_SEL))
   // Flag FE4x (VIA) accesses and also all &FC, &FD expansion pages
   `define DECODED_FE4X        ((cpu_adr[15:4]==12'hFE4) || (cpu_adr[15:9]==7'b1111_110))
 `else
@@ -166,10 +154,13 @@ module level1b_mk2_m (
   reg                                  map_rom_cf_q;
   reg                                  map_rom_47_q;
 `endif
-
-`ifndef BBC_MICRO_ONLY
-  reg                                  rdy_q;
+`ifdef MASTER_RAM_8000
+  reg                                  ram_at_8000;
 `endif
+`ifdef MASTER_RAM_C000
+  reg                                  ram_at_c000;
+`endif
+  reg                                  rdy_q;
   wire                                 io_access_pipe_d;
   wire                                 himem_vram_wr_d;
 
@@ -244,12 +235,7 @@ module level1b_mk2_m (
   assign bbc_sync = cpu_vpa & cpu_vda;
   assign irqb = 1'bz;
   assign nmib = 1'bz;
-
-`ifdef BBC_MICRO_ONLY
   assign rdy =  1'bz;
-`else
-  assign rdy = (sw_rdy_w) ? 1'bz : 1'b0;
-`endif
 
   // Native mode interrupts will be redirected to himem
   assign native_mode_int_w = !cpu_vpb & !cpu_e ;
@@ -299,12 +285,8 @@ module level1b_mk2_m (
   assign bbc_rnw_pre = cpu_rnw | dummy_access_w ;
   BUF    bbc_rnw_0( .I(bbc_rnw_pre), .O(bbc_rnw_del) );
   BUF    bbc_rnw_1( .I(bbc_rnw_del), .O(bbc_rnw_del2) );
-  // Electron needs delay on RNW to reduce xtalk (ok for Beeb too)
-`ifdef BBC_MICRO_ONLY
-  assign bbc_rnw = bbc_rnw_pre ;
-`else
+  // Electron needs delay on RNW to reduce xtalk
   assign bbc_rnw = (`L1_ELK_MODE) ? (bbc_rnw_del2 | bbc_rnw_pre) : bbc_rnw_pre ;
-`endif
   assign bbc_data = ( !bbc_rnw & bbc_phi2) ? cpu_data : { 8{1'bz}};
   assign cpu_data = cpu_data_r;
 
@@ -343,22 +325,40 @@ module level1b_mk2_m (
 `ifdef PIPELINE_ROM_CTRL
     if (!cpu_data[7] & cpu_adr[15] & (cpu_vpa|cpu_vda) ) begin
       if (!cpu_adr[14]) begin
+`ifdef MASTER_RAM_8000
+        remapped_romCF_access_r = map_rom_cf_q & (cpu_adr[12] | cpu_adr[13] | !ram_at_8000);
+        remapped_rom47_access_r = map_rom_47_q & (cpu_adr[12] | cpu_adr[13] | !ram_at_8000);
+`else
         remapped_romCF_access_r = map_rom_cf_q;
         remapped_rom47_access_r = map_rom_47_q;
+`endif
       end
       // Remap MOS from C000-FBFF only (exclude IO space and vectors)
       else
+`ifdef MASTER_RAM_C000
+        remapped_mos_access_r = !(&(cpu_adr[13:10])) & (cpu_adr[13] | !ram_at_c000) & map_data_q[`MAP_ROM_IDX];
+`else
         remapped_mos_access_r = !(&(cpu_adr[13:10])) & map_data_q[`MAP_ROM_IDX];
+`endif
     end
 `else
     if (!cpu_data[7] & cpu_adr[15] & (cpu_vpa|cpu_vda) & map_data_q[`MAP_ROM_IDX]) begin
        if (!cpu_adr[14]) begin
+`ifdef MASTER_RAM_8000
+         remapped_romCF_access_r = (bbc_pagereg_q[3:2] == 2'b11) & (cpu_adr[12] | cpu_adr[13] | !ram_at_8000);
+         remapped_rom47_access_r = (bbc_pagereg_q[3:2] == 2'b01) & (cpu_adr[12] | cpu_adr[13] | !ram_at_8000);
+`else
          remapped_romCF_access_r = (bbc_pagereg_q[3:2] == 2'b11) ;
          remapped_rom47_access_r = (bbc_pagereg_q[3:2] == 2'b01) ;
+`endif
        end
        // Remap MOS from C000-FBFF only (exclude IO space and vectors)
        else
+`ifdef MASTER_RAM_C000
+         remapped_mos_access_r = !(&(cpu_adr[13:10])) & (cpu_adr[13] | !ram_at_c000);
+`else
          remapped_mos_access_r = !(&(cpu_adr[13:10]));
+`endif
      end
 `endif
   end
@@ -438,6 +438,12 @@ module level1b_mk2_m (
       begin
         map_data_q <= {`MAP_CC_DATA_SZ{1'b0}};
         bbc_pagereg_q <= {`BBC_PAGEREG_SZ{1'b0}};
+`ifdef MASTER_RAM_8000
+        ram_at_8000 <= 1'b0;
+`endif
+`ifdef MASTER_RAM_C000
+        ram_at_c000 <= 1'b0;
+`endif
       end
     else
       begin
@@ -454,28 +460,30 @@ module level1b_mk2_m (
 	  map_data_q[`CLK_CPUCLK_DIV_IDX_HI]  <= cpu_data[`CLK_CPUCLK_DIV_IDX_HI];
 	  map_data_q[`CLK_CPUCLK_DIV_IDX_LO]  <= cpu_data[`CLK_CPUCLK_DIV_IDX_LO];
         end
-        else if (cpld_reg_sel_w[`CPLD_REG_SEL_BBC_PAGEREG_IDX] & !cpu_rnw )
+        else if (cpld_reg_sel_w[`CPLD_REG_SEL_BBC_PAGEREG_IDX] & !cpu_rnw ) begin
           bbc_pagereg_q <= cpu_data;
-        else if (cpld_reg_sel_w[`CPLD_REG_SEL_BBC_SHADOW_IDX] & !cpu_rnw )
+`ifdef MASTER_RAM_8000
+          ram_at_8000 <= cpu_data[7];
+`endif
+        end
+        else if (cpld_reg_sel_w[`CPLD_REG_SEL_BBC_SHADOW_IDX] & !cpu_rnw ) begin
           map_data_q[`SHADOW_MEM_IDX] <= cpu_data[`SHADOW_MEM_IDX];
+`ifdef MASTER_RAM_C000
+          ram_at_c000 <= cpu_data[3];
+`endif
+        end
       end // else: !if( !resetb )
 
-`ifndef BBC_MICRO_ONLY
   // Sample Rdy at the start of the cycle, so it remains stable for the remainder of the cycle
   always @ ( negedge cpu_phi2_w)
     rdy_q <= rdy;
-`endif
 
   // Flop all the internal register sel bits on falling edge of phi1
   always @ ( posedge cpu_phi2_w or negedge resetb )
     if ( !resetb )
         cpld_reg_sel_q <= {`CPLD_REG_SEL_SZ{1'b0}};
     else
-`ifdef BBC_MICRO_ONLY
-        cpld_reg_sel_q <= (cpu_vda) ? cpld_reg_sel_d : {`CPLD_REG_SEL_SZ{1'b0}};
-`else
         cpld_reg_sel_q <= (rdy_q & cpu_vda) ? cpld_reg_sel_d : {`CPLD_REG_SEL_SZ{1'b0}};
-`endif
 
 `ifdef PIPELINE_ROM_CTRL
     always @ ( negedge cpu_phi2_w or negedge resetb )
@@ -495,21 +503,13 @@ module level1b_mk2_m (
       io_access_pipe_q <= {`IO_ACCESS_DELAY_SZ{1'b1}};
     else begin
 `ifdef ALWAYS_DELAY_SWITCH_TO_HS
-  `ifdef BBC_MICRO_ONLY
-      if (!cpu_hiaddr_lat_q[7] & (cpu_vda|cpu_vpa))
-  `else
       if (!cpu_hiaddr_lat_q[7] & (cpu_vda|cpu_vpa) & rdy)
-  `endif
         io_access_pipe_q <= {`IO_ACCESS_DELAY_SZ{1'b1}};
 `else
       if (io_access_pipe_d )
         io_access_pipe_q <= {`IO_ACCESS_DELAY_SZ{1'b1}};
 `endif // !`ifdef ALWAYS_DELAY_SWITCH_TO_HS
-`ifdef BBC_MICRO_ONLY
-      else if ( cpu_vpa & cpu_vda)
-`else
       else if ( cpu_vpa & cpu_vda & rdy)
-`endif
         io_access_pipe_q <= { !map_data_q[`MAP_HSCLK_EN_IDX], io_access_pipe_q[`IO_ACCESS_DELAY_SZ-2:1] } ;
     end
   end
@@ -536,11 +536,7 @@ module level1b_mk2_m (
 
   // Latches for the high address bits open during PHI1
   always @ ( * )
-`ifdef BBC_MICRO_ONLY
-    if ( !cpu_phi2_w )
-`else
     if ( rdy & rdy_q & !cpu_phi2_w )
-`endif
       begin
         cpu_hiaddr_lat_q <= cpu_hiaddr_lat_d ;
         cpu_a15_lat_q <= cpu_a15_lat_d;
