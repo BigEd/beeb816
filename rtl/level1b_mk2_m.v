@@ -18,10 +18,6 @@
 `define DELAY_RAMOEB_BY_2
 //`define DELAY_RAMOEB_BY_3
 
-// Defining this should improve speed at cost of additional FFs, but observed speed
-// reduced in testing
-//`define PIPELINE_ROM_CTRL 1
-
 // Define this to add a simple deglitch circuit to the incoming BBC clock ahead of the
 // clock switch
 `define DEGLITCH_CLOCK_IN 1
@@ -42,11 +38,6 @@
 // Define this to have the host set the type field in the map register rather than define it by jumpers
 // (And remember to remove the jumpers if setting this !)
 // `define HOST_SET_OWN_TYPE 1
-
-// Define this to always delay return to HS clock by the selected number of SYNC (fetches) and not
-// just after accessing specific IO areas - causes slight performance loss of ~ 0.3% in CLOCKSP CA,
-// but small reduction in overall CPLD resources (including decoding currently in cpld_jnr)
-//`define ALWAYS_DELAY_SWITCH_TO_HS 1
 
 // Define this to bring decoding back into the main CPLD (mainly for capacity evaluation). Note
 // that the address lsb latches are still assumed external to keep the same pin out.
@@ -150,10 +141,6 @@ module level1b_mk2_m (
   reg                                  cpu_a14_lat_q;
   reg [7:0]                            cpu_hiaddr_lat_d;
   reg [ `IO_ACCESS_DELAY_SZ-1:0]       io_access_pipe_q;
-`ifdef PIPELINE_ROM_CTRL
-  reg                                  map_rom_cf_q;
-  reg                                  map_rom_47_q;
-`endif
 `ifdef MASTER_RAM_8000
   reg                                  ram_at_8000;
 `endif
@@ -322,26 +309,6 @@ module level1b_mk2_m (
     remapped_mos_access_r = 0;
     remapped_rom47_access_r = 0;
     remapped_romCF_access_r = 0;
-`ifdef PIPELINE_ROM_CTRL
-    if (!cpu_data[7] & cpu_adr[15] & (cpu_vpa|cpu_vda) ) begin
-      if (!cpu_adr[14]) begin
-`ifdef MASTER_RAM_8000
-        remapped_romCF_access_r = map_rom_cf_q & (cpu_adr[12] | cpu_adr[13] | !ram_at_8000);
-        remapped_rom47_access_r = map_rom_47_q & (cpu_adr[12] | cpu_adr[13] | !ram_at_8000);
-`else
-        remapped_romCF_access_r = map_rom_cf_q;
-        remapped_rom47_access_r = map_rom_47_q;
-`endif
-      end
-      // Remap MOS from C000-FBFF only (exclude IO space and vectors)
-      else
-`ifdef MASTER_RAM_C000
-        remapped_mos_access_r = !(&(cpu_adr[13:10])) & (cpu_adr[13] | !ram_at_c000) & map_data_q[`MAP_ROM_IDX];
-`else
-        remapped_mos_access_r = !(&(cpu_adr[13:10])) & map_data_q[`MAP_ROM_IDX];
-`endif
-    end
-`else
     if (!cpu_data[7] & cpu_adr[15] & (cpu_vpa|cpu_vda) & map_data_q[`MAP_ROM_IDX]) begin
        if (!cpu_adr[14]) begin
 `ifdef MASTER_RAM_8000
@@ -360,7 +327,6 @@ module level1b_mk2_m (
          remapped_mos_access_r = !(&(cpu_adr[13:10]));
 `endif
      end
-`endif
   end
 
   always @ ( * ) begin
@@ -387,11 +353,7 @@ module level1b_mk2_m (
       // All remapped ROM slots 4-7 accesses to 8'b1110x100
       // All remapped ROM slots C-F accesses to 8'b1110x101
       if (remapped_rom47_access_r | remapped_romCF_access_r) begin
-`ifdef PIPELINE_ROM_CTRL
-        cpu_hiaddr_lat_d = { 6'b1111_11, map_rom_cf_q, map_rom_47_q};
-`else
         cpu_hiaddr_lat_d = (remapped_rom47_access_r) ? 8'hFD: 8'hFE;
-`endif
         cpu_a15_lat_d = bbc_pagereg_q[1];
         cpu_a14_lat_d = bbc_pagereg_q[0];
       end
@@ -485,16 +447,6 @@ module level1b_mk2_m (
     else
         cpld_reg_sel_q <= (rdy_q & cpu_vda) ? cpld_reg_sel_d : {`CPLD_REG_SEL_SZ{1'b0}};
 
-`ifdef PIPELINE_ROM_CTRL
-    always @ ( negedge cpu_phi2_w or negedge resetb )
-      if ( !resetb )
-        {map_rom_cf_q, map_rom_47_q}  <= 2'b00;
-      else begin
-        map_rom_cf_q <= map_data_q[`MAP_ROM_IDX] & (bbc_pagereg_q[3:2]==2'b11);
-        map_rom_47_q <= map_data_q[`MAP_ROM_IDX] & (bbc_pagereg_q[3:2]==2'b01);
-      end
-`endif
-
   // Short pipeline to delay switching back to hs clock after an IO access to ensure any instruction
   // timed delays are respected. This pipeline is initialised to all 1's for force slow clock on startup
   // and will fill with the value of the HS clock enable register as instructions are executed.
@@ -502,13 +454,8 @@ module level1b_mk2_m (
     if ( !resetb )
       io_access_pipe_q <= {`IO_ACCESS_DELAY_SZ{1'b1}};
     else begin
-`ifdef ALWAYS_DELAY_SWITCH_TO_HS
-      if (!cpu_hiaddr_lat_q[7] & (cpu_vda|cpu_vpa) & rdy)
-        io_access_pipe_q <= {`IO_ACCESS_DELAY_SZ{1'b1}};
-`else
       if (io_access_pipe_d )
         io_access_pipe_q <= {`IO_ACCESS_DELAY_SZ{1'b1}};
-`endif // !`ifdef ALWAYS_DELAY_SWITCH_TO_HS
       else if ( cpu_vpa & cpu_vda & rdy)
         io_access_pipe_q <= { !map_data_q[`MAP_HSCLK_EN_IDX], io_access_pipe_q[`IO_ACCESS_DELAY_SZ-2:1] } ;
     end
