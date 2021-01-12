@@ -1,18 +1,23 @@
 #!/bin/bash
-# ./README [xc9572|xc95108] [$defines]
+# ./README [design ] [xc9572|xc95108]
 design=level1b_mk2_m
+design=cpld_jnr
 
 if [ $# -lt 1 ]; then
-    target=xc95108-15-pc84
+    design=level1b_mk2_m
 else
-    target=$1
+    design=$1
 fi
 
+
 if [ $# -lt 2 ]; then
-    defines=""
+    target=xc95108-15-pc84
 else
-    defines=$2
+    target=$2
 fi
+
+defines=""
+
 
 echo "Building for $target"
 
@@ -23,9 +28,6 @@ ${BUILD_SCR}  \
     -m ${design} \
     -d build_${target}_p3_ff \
     -f -t ${target}  \
-    -c ${design}.ucf -o speed 
+    -c ${design}.ucf -o speed
 # mv build_${target}_p3_ff/${design}.jed ./${design}_${defines}.jed
 #    -a "cpldfit: -pterms 12" \
-
-
-

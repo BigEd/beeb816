@@ -1,0 +1,36 @@
+# Pin Assignments to match PCB netlist
+PIN "dec_fe4x"	    LOC = P1 ;
+PIN "cpu_adr[15]"   LOC = P2 ;
+PIN "dec_rom_reg"   LOC = P3 ;
+PIN "cpu_adr[13]"   LOC = P4 ;
+PIN "dec_shadow_reg" LOC = P5 ; # GCK1
+PIN "cpu_adr[14]"   LOC = P6 ; # GCK2
+PIN "lat_en"        LOC = P7 ; # GCK3
+PIN "cpu_adr[12]"   LOC = P8 ;
+PIN "cpu_adr[11]"   LOC = P9 ;
+PIN "cpu_adr[10]"   LOC = P11 ;
+PIN "cpu_adr[9]"    LOC = P12 ;
+PIN "cpu_adr[8]"    LOC = P13 ;
+PIN "cpu_adr[7]"    LOC = P14 ;
+PIN "cpu_adr[6]"    LOC = P18 ;
+PIN "cpu_adr[5]"    LOC = P19 ;
+PIN "cpu_adr[4]"    LOC = P20 ;
+PIN "cpu_adr[3]"    LOC = P22 ;
+PIN "cpu_adr[2]"    LOC = P24 ;
+PIN "cpu_adr[1]"    LOC = P25 ;
+PIN "cpu_adr[0]"    LOC = P26 ;
+PIN "bbc_adr[10]"   LOC = P27 ;
+PIN "bbc_adr[11]"   LOC = P28 ;
+PIN "bbc_adr[9]"    LOC = P29 ;
+PIN "bbc_adr[8]"    LOC = P33 ;
+PIN "bbc_adr[7]"    LOC = P34 ;
+PIN "bbc_adr[6]"    LOC = P35 ;
+PIN "bbc_adr[5]"    LOC = P36 ;
+PIN "bbc_adr[4]"    LOC = P37 ;
+PIN "bbc_adr[3]"    LOC = P38 ;
+PIN "bbc_adr[2]"    LOC = P39 ; # GSR
+PIN "bbc_adr[1]"    LOC = P40 ; # GTS2
+PIN "j[1]"          LOC = P42 ; # GTS1
+PIN "j[0]"          LOC = P43 ;
+PIN "bbc_adr[0]"    LOC = P44 ;
+
