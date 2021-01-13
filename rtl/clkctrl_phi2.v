@@ -7,10 +7,14 @@
 // for correct logical operation.)
 `define HS_PIPE_SZ 4
 
-// Number of retiming steps of slow clock for hs clock enable, N must be >= 2
-// at higher speeds esp with -15ns parts
-//`define SINGLE_LS_RETIMER 1
-`define LS_PIPE_SZ 2
+// Number of retiming steps of slow clock for hs clock enable.
+// 1 Retiming stage seems to work on slow clock - 2 might be safer
+`define SINGLE_LS_RETIMER 1
+`ifdef SINGLE_LS_RETIMER
+  `define LS_PIPE_SZ 1
+`else
+  `define LS_PIPE_SZ 2
+`endif
 
 // Define this to assert RDY each time a clock switch is made
 //`define ASSERT_RDY_ON_CLKSW 1
