@@ -1,6 +1,10 @@
 `timescale 1ns / 1ns
 //
-// Option2 PCB Respin - main CPLD code
+// Mark2A/B - main CPLD code
+//
+// Define this to build firmware for the Mark2B board which merges the dual CPLDs from
+// the Mark2A into a single device
+// `define MARK2B 1
 //
 // Depth of pipeline to delay switches to HS clock after an IO access. Need more cycles for
 // faster clocks so ideally this should be linked with the divider setting. Over 16MHz needs
@@ -11,7 +15,7 @@
 `define FORCE_KEEP_CLOCK 1
 
 // Define to drive clocks to test points tp[1:0]
-//`define OBSERVE_CLOCKS 1
+`define OBSERVE_CLOCKS 1
 
 // Set one of these to falling edge of RAMOEB by one buffer when running with fast SRAM
 //`define DELAY_RAMOEB_BY_1
@@ -36,12 +40,16 @@
 `define VRAM_AREA              `VRAM_AREA_20K_N_31K
 
 // Define this to have the host set the type field in the map register rather than define it by jumpers
-// (And remember to remove the jumpers if setting this !)
-// `define HOST_SET_OWN_TYPE 1
-
+// (And remember to remove the jumpers if setting this !). Must be set for MARK2B board
+`ifdef MARK2B
+  `define HOST_SET_OWN_TYPE 1
+`endif
 // Define this to bring decoding back into the main CPLD (mainly for capacity evaluation). Note
-// that the address lsb latches are still assumed external to keep the same pin out.
-//`define LOCAL_DECODING 1
+// that the address lsb latches are still assumed external to keep the same pin out. Must be defined
+// for the Mark2B board.
+`ifdef MARK2B
+  `define LOCAL_DECODING 1
+`endif
 `ifdef LOCAL_DECODING
   `define ELK_PAGED_ROM_SEL 16'hFE05
   `define PAGED_ROM_SEL 16'hFE30
@@ -96,23 +104,34 @@ module level1b_mk2_m (
                       input          bbc_phi0,
                       input          hsclk,
                       input          cpu_rnw,
-                      inout  [1:0]   j,
+                      inout [1:0]    j,
                       output [1:0]   tp,
+`ifdef MARK2B
+                      input          rdy,
+                      input          nmib,
+                      input          irqb,
+                      output         cpu_rstb,         
+                      output         cpu_rdy,
+                      output         cpu_nmib,
+                      output         cpu_irqb,
+                      output [15:0]  bbc_adr,
+`else
                       input          dec_shadow_reg,
                       input          dec_rom_reg,
                       input          dec_fe4x,
-                      inout [7:0]    cpu_data,
-                      inout [7:0]    bbc_data,
                       inout          rdy,
                       inout          nmib,
                       inout          irqb,
                       output         lat_en,
+                      output [15:12] bbc_adr,
+`endif
+                      inout [7:0]    cpu_data,
+                      inout [7:0]    bbc_data,
                       output         ram_web,
                       output         ram_ceb,
                       output         ram_oeb,
                       output [18:14] ram_adr,
                       output         bbc_sync,
-                      output [15:12] bbc_adr,
                       output         bbc_rnw,
                       output         bbc_phi1,
                       output         bbc_phi2,
@@ -175,7 +194,7 @@ module level1b_mk2_m (
 
   // Fast RAM mode set by jumper on tp[0] unless being use as a test point
 `ifdef OBSERVE_CLOCKS
-  assign tp = { sw_rdy_w, cpu_phi2 };
+  assign tp = { bbc_phi2, cpu_phi2 };
 `endif
 
 
@@ -220,10 +239,18 @@ module level1b_mk2_m (
   assign cpu_phi2 =  cpu_phi2_w ;
 
   assign bbc_sync = cpu_vpa & cpu_vda;
+
+`ifdef MARK2B
+  // CPLD must do 5V/3V3 shifting on all control signals from host
+  assign cpu_irqb = irqb;
+  assign cpu_nmib = nmib;
+  assign cpu_rdy =  rdy;
+  assign cpu_rstb = resetb;  
+`else  
   assign irqb = 1'bz;
   assign nmib = 1'bz;
   assign rdy =  1'bz;
-
+`endif
   // Native mode interrupts will be redirected to himem
   assign native_mode_int_w = !cpu_vpb & !cpu_e ;
   // Drive the all RAM address pins, allowing for 512K RAM connection
@@ -264,7 +291,11 @@ module level1b_mk2_m (
   assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_SHADOW_IDX] = (cpu_data[7]== 1'b0) && `DECODED_SHADOW_REG ;
 
   // Force dummy read access when accessing himem explicitly but not for remapped RAM accesses which can still complete
+`ifdef MARK2B
+  assign bbc_adr = { (dummy_access_w) ? 16'hC000 : cpu_adr };  
+`else  
   assign bbc_adr = { (dummy_access_w) ? 4'b1100 : cpu_adr[15:12] };
+`endif  
 
   // Build delay chain for use with Electron to improve xtalk (will be bypassed for other machines)
 

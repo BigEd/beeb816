@@ -1,12 +1,25 @@
 #!/bin/bash
-# ./README [design ] [xc9572|xc95108]
+# ./README [design ] [target]
 design=level1b_mk2_m
 design=cpld_jnr
+design=beeb816_mk2b
 
+target=xc95144xl-10-tq100
+target=xc95288xl-7-tq144
+target=xc95108-10-pc84
+target=xc9536-10-pc44
+
+# rename level1b_mk2_m board to beeb816_mk2b.v for alternate build
+
+startdir=`$pwd`
 if [ $# -lt 1 ]; then
     design=level1b_mk2_m
 else
     design=$1
+    if [ $design==beeb816_mkb ] ; then
+       sed 's/level1b_mk2_m/beeb816_mk2b/g' level1b_mk2_m.v |\
+       perl -pale 's/(.*define\s+MARK2B.*)/\`define MARK2B 1/g'> beeb816_mk2b.v
+    fi    
 fi
 
 
@@ -31,3 +44,9 @@ ${BUILD_SCR}  \
     -c ${design}.ucf -o speed
 # mv build_${target}_p3_ff/${design}.jed ./${design}_${defines}.jed
 #    -a "cpldfit: -pterms 12" \
+
+## Tidy up original dir
+cd $startdir
+if [[ -f "beeb816_mk2b.v" ]] ; then
+    rm -rf beeb816_mk2b.v
+fi
