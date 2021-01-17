@@ -25,13 +25,10 @@
 // Define this to add a simple deglitch circuit to the incoming BBC clock ahead of the
 // clock switch
 `define DEGLITCH_CLOCK_IN 1
-
 // Define this for Master RAM overlay at 8000
-//`define MASTER_RAM_8000 1
-
+// `define MASTER_RAM_8000 1
 // Define this for Master RAM overlay at C000
 // `define MASTER_RAM_C000 1
-
 // Define this to use fast reads/slow writes to Shadow as with the VRAM to simplify decoding
 //`define CACHED_SHADOW_RAM 1
 // Trial code to make VRAM area larger than default of 20K to simplify decoding(can be used with above)
@@ -41,15 +38,25 @@
 
 // Define this to have the host set the type field in the map register rather than define it by jumpers
 // (And remember to remove the jumpers if setting this !). Must be set for MARK2B board
-`ifdef MARK2B
-  `define HOST_SET_OWN_TYPE 1
-`endif
+// `define HOST_SET_OWN_TYPE 1
 // Define this to bring decoding back into the main CPLD (mainly for capacity evaluation). Note
 // that the address lsb latches are still assumed external to keep the same pin out. Must be defined
 // for the Mark2B board.
+// `define LOCAL_DECODING 1
+
+
 `ifdef MARK2B
+  // Enable MASTER code
+  `define MASTER_RAM_8000 1
+  `define MASTER_RAM_C000 1
+  // Host sets machine type on boot - ignore jumpers
+  `define HOST_SET_OWN_TYPE 1
+  // All-in-one CPLD - no offloading of decoding to external IC
   `define LOCAL_DECODING 1
+  // Dont need to save resources so undefine this ?
+  //`undef FORCE_KEEP_CLOCK
 `endif
+
 `ifdef LOCAL_DECODING
   `define ELK_PAGED_ROM_SEL 16'hFE05
   `define PAGED_ROM_SEL 16'hFE30
@@ -110,7 +117,7 @@ module level1b_mk2_m (
                       input          rdy,
                       input          nmib,
                       input          irqb,
-                      output         cpu_rstb,         
+                      output         cpu_rstb,
                       output         cpu_rdy,
                       output         cpu_nmib,
                       output         cpu_irqb,
@@ -188,15 +195,11 @@ module level1b_mk2_m (
   wire [ `CPLD_REG_SEL_SZ-1:0]         cpld_reg_sel_w;
   wire                                 ckdel_w;
 
-`ifdef HOST_SET_OWN_TYPE
-  assign j = map_data_q[`JUMPER_1_IDX:`JUMPER_0_IDX];
-`endif
-
+  assign j = 2'bz;
   // Fast RAM mode set by jumper on tp[0] unless being use as a test point
 `ifdef OBSERVE_CLOCKS
   assign tp = { bbc_phi2, cpu_phi2 };
 `endif
-
 
 `ifdef DEGLITCH_CLOCK_IN
   // Deglitch PHI0 input for feeding to clock switch only
@@ -245,8 +248,8 @@ module level1b_mk2_m (
   assign cpu_irqb = irqb;
   assign cpu_nmib = nmib;
   assign cpu_rdy =  rdy;
-  assign cpu_rstb = resetb;  
-`else  
+  assign cpu_rstb = resetb;
+`else
   assign irqb = 1'bz;
   assign nmib = 1'bz;
   assign rdy =  1'bz;
@@ -292,10 +295,10 @@ module level1b_mk2_m (
 
   // Force dummy read access when accessing himem explicitly but not for remapped RAM accesses which can still complete
 `ifdef MARK2B
-  assign bbc_adr = { (dummy_access_w) ? 16'hC000 : cpu_adr };  
-`else  
+  assign bbc_adr = { (dummy_access_w) ? 16'hC000 : cpu_adr };
+`else
   assign bbc_adr = { (dummy_access_w) ? 4'b1100 : cpu_adr[15:12] };
-`endif  
+`endif
 
   // Build delay chain for use with Electron to improve xtalk (will be bypassed for other machines)
 
@@ -343,8 +346,14 @@ module level1b_mk2_m (
     if (!cpu_data[7] & cpu_adr[15] & (cpu_vpa|cpu_vda) & map_data_q[`MAP_ROM_IDX]) begin
        if (!cpu_adr[14]) begin
 `ifdef MASTER_RAM_8000
-         remapped_romCF_access_r = (bbc_pagereg_q[3:2] == 2'b11) & (cpu_adr[12] | cpu_adr[13] | !ram_at_8000);
-         remapped_rom47_access_r = (bbc_pagereg_q[3:2] == 2'b01) & (cpu_adr[12] | cpu_adr[13] | !ram_at_8000);
+         if ( `L1_MASTER_MODE ) begin
+           remapped_romCF_access_r = (bbc_pagereg_q[3:2] == 2'b11) & (cpu_adr[12] | cpu_adr[13] | !ram_at_8000);
+           remapped_rom47_access_r = (bbc_pagereg_q[3:2] == 2'b01) & (cpu_adr[12] | cpu_adr[13] | !ram_at_8000);
+         end
+         else begin
+           remapped_romCF_access_r = (bbc_pagereg_q[3:2] == 2'b11) ;
+           remapped_rom47_access_r = (bbc_pagereg_q[3:2] == 2'b01) ;
+         end
 `else
          remapped_romCF_access_r = (bbc_pagereg_q[3:2] == 2'b11) ;
          remapped_rom47_access_r = (bbc_pagereg_q[3:2] == 2'b01) ;
@@ -353,7 +362,10 @@ module level1b_mk2_m (
        // Remap MOS from C000-FBFF only (exclude IO space and vectors)
        else
 `ifdef MASTER_RAM_C000
-         remapped_mos_access_r = !(&(cpu_adr[13:10])) & (cpu_adr[13] | !ram_at_c000);
+         if ( `L1_MASTER_MODE )
+           remapped_mos_access_r = !(&(cpu_adr[13:10])) & (cpu_adr[13] | !ram_at_c000);
+         else
+           remapped_mos_access_r = !(&(cpu_adr[13:10]));
 `else
          remapped_mos_access_r = !(&(cpu_adr[13:10]));
 `endif
