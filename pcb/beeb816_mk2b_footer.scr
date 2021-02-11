@@ -1,0 +1,174 @@
+# Maximum Eagle freeware board size is 4.0x3.2" (100x80mm)
+# better to work in inches for 0.1 inch pad pitch
+Grid default;
+# Grid 1.9685 mil;
+Set Wire_Bend 0;
+Layer Dimension;
+Wire 0  (0 0) (3.92 3.2) (0 0);
+Layer Top;
+
+# PCB-Pool/PCB-Train design rule is actually 0.006/0.006 for wires
+CLASS 0 signal 0.007945 0.007870 ;
+CLASS 1 supply 0.007945 0.007870 ;
+
+# PCB fixing holes
+ADD 2,8@holes H1 R0 (3.722 2.782); 
+ADD 2,8@holes H2 R0 (3.722 0.418); 
+ADD 2,8@holes H3 R0 (0.2 2.882); 
+ADD 2,8@holes H4 R0 (0.2 0.318); 
+
+
+
+# ROTATE =R180  C100N_1 ;
+ROTATE =R0    C100N_2 ;
+ROTATE =R0    C100N_3 ;
+ROTATE =R0    C100N_4 ;
+ROTATE =R0    C100N_10;
+ROTATE =R0    C100N_11;
+# ROTATE =R0    C100N_12;
+
+ROTATE =R0 CAP22UF_SYS ;
+ROTATE =R0 CAP22UF_5V ;
+ROTATE =R270 CON  ;
+ROTATE =R135 CPLD ;
+ROTATE =R270 CPU  ;
+ROTATE =R0  JTAG ;
+ROTATE =R180 TCLK ;
+ROTATE =R180   REG3V3 ;
+ROTATE =R270   reg_cap0 ;
+ROTATE =R270   reg_cap1 ;
+
+ROTATE =R0   TSTPT ;
+ROTATE =R180 CLKLNK ;
+ROTATE =R180 vdd_5v_lnk;
+ROTATE =R0   OSC  ;
+ROTATE =R270 SRAM ;
+
+ROTATE =R0   c47pf  ;
+ROTATE =R0   r330_1 ;
+ROTATE =R270 r47k ;
+ROTATE =R0   r10k_0;
+ROTATE =R180 r10k_1;
+
+# MOVE C100N_1     ( 2.559 2.25 ) ;
+MOVE C100N_2     ( 0.35 2.60 ) ;
+MOVE C100N_3     ( 1.50 2.25 ) ;
+MOVE C100N_4     ( 2.559 0.95) ;
+MOVE C100N_10    ( 2.5688925 1.7520) ;
+MOVE C100N_11    ( 2.5688925 1.4764) ;
+#  MOVE C100N_12    ( 2.80 0.5) ;
+
+MOVE vdd_5v_lnk  ( 3.45 0.2) ;
+MOVE CAP22UF_SYS  ( 0.5  0.2) ;
+MOVE CAP22UF_5V   ( 3.10  0.25 ) ;
+MOVE CON         ( 3.85 1.60) ;
+MOVE CPLD        ( 2.5688925 1.53543) ;
+MOVE TSTPT       ( 2.45 3.00) ;
+MOVE JTAG        ( 1.85 3.0) ;
+MOVE DIP         ( 2.9 2.9) ;
+MOVE OSC         ( 1.10 2.9) ;
+MOVE CPU         ( 0.45 1.55) ;
+MOVE SRAM        ( 1.30 1.35) ;
+MOV  CLKLNK      ( 3.3 2.90);
+MOV  TCLK        ( 3.3 2.70);
+MOVE c47pf       ( 3.2 3.05) ;
+MOVE r330_8      ( 3.4 3.05) ;
+MOV  r47k        ( 3.15 2.45) ;
+
+MOV  REG3V3      (2.55 0.45) ;
+MOV  reg_cap1    (2.15 0.25) ;
+MOV  reg_cap0    (2.75 0.25) ;
+
+MOV  sysvdd_lnk  (2.45 0.15) ; 
+
+# Clock resistor
+MOVE r330_8      (3.55 3.05);
+
+# Other Current limiting resistors
+MOVE r330_9      (3.5 2.45);
+MOVE r330_10     (3.5 2.35);
+MOVE r330_11     (3.5 2.25);
+MOVE r330_12     (3.5 2.15);
+
+# Databus resistors
+MOVE r330_0      (3.5 1.85);
+MOVE r330_1      (3.5 1.75);
+MOVE r330_2      (3.5 1.65);
+MOVE r330_3      (3.5 1.55);
+MOVE r330_4      (3.5 1.45);
+MOVE r330_5      (3.5 1.35);
+MOVE r330_6      (3.5 1.25);
+MOVE r330_7      (3.5 1.15);
+
+# DIP pull-downs
+MOVE r10k_0      ( 2.8 2.6);
+MOVE r10k_1      ( 3.0 2.6);
+
+## # SMD Caps on the back of the board
+MIRROR C100N_10;
+MIRROR C100N_11;
+## MIRROR C100N_12;
+
+Window Fit;
+
+## Preroute HS CLK
+## layer top;
+## wire  0.015;
+## wire  'hsclk' (3.30 2.75) (3.30 1.95) (3.15 1.95);
+## layer bottom;
+## wire  0.015;
+## wire  'hsclk' (1.4 3.05) (1.55 3.05) (1.55 2.75 ) ( 3.30 2.75);
+
+# Preroute VDD and GND rings
+layer top;
+wire  0.024;
+wire  'VDD_SYS'   (1.75 3.17) (0.028 3.17) (0.028 0.028) ( 2.45 0.028) ;
+wire  'VDD_3V3'   (1.9 3.17) (3.89 3.17) (3.89 2.0) ;
+wire  'VDD_5V_IN' (3.89 1.90) (3.89 0.2) (3.5 0.2);
+wire  'VDD_5V'    (2.55 0.028)(3.5 0.028) (3.4 0.2);
+wire  0.020;
+wire  'VDD_5V_IN' (3.75 1.85) (3.89 1.85) ;
+wire  'VDD_3V3' (2.15 0.35) (2.15 0.60) (3.85 0.60) (3.85 0.80) ;
+
+layer bottom;
+wire  0.024;
+wire  'GND' (3.89 2.55) (3.89 3.17) (0.03 3.17) (0.03 0.03)( 3.89 0.03) (3.89 0.65) ;
+wire  'VDD_3V3' (3.85 0.80) (3.89 0.80) (3.89 2.0) ;
+
+# load autorouter params to get finer routing grid
+DRC load /tmp/design_rules_smd.dru ;
+Auto load /tmp/fine_routing.ctl;
+AUTO
+
+## ## Define power fills top and bottom over whole board area
+layer Top;
+change Isolate 0.02 ;
+change Orphans Off ;
+polygon VDD_SYS 0.020  (0 0) (0 3.2) (1.75 3.2) (1.75 0) ( 0 0) ;
+polygon VDD_3V3 0.020  (1.9 0.1) (2.4 0.1) (2.4 0.5) (3.89 0.5) ( 3.89 3.2) ( 1.9 3.2 ) (1.9 0.1) ;
+polygon VDD_5V 0.020  (2.5 0) (2.5 0.45) (3.89 0.45) (3.89 0) ( 2.5 0);
+layer Bottom;
+polygon GND 0.020  (0 0) (0 3.2) (3.92 3.2) (3.92 0) (0 0) ;
+
+RatsNest;   # to show incomplete wires and polygons
+
+Layer tPlace ;
+CHANGE FONT PROPORTIONAL ;
+CHANGE SIZE 0.06 ;
+TEXT 'Beeb816 Revival! Mark2B' R0 (0.1 0.16) ;
+CHANGE SIZE 0.04 ;
+TEXT '(C) 2021, Revaldinho, BigEd, Hoglet, http://github.com/BigEd/beeb816'  R0 (0.1 0.08) ;
+
+CHANGE FONT FIXED ;
+CHANGE SIZE 0.03 ;
+CHANGE WIDTH 0.01 ;
+## WIRE  (1.9 2.61) (1.9 2.75 ) (2.35 2.75 ) (2.35 2.61) (1.9 2.61 ) ;
+TEXT 'GND TDI TCK NC' R0  (1.75 2.85) ;
+TEXT 'GND TMS TDO 3V3' R0 (1.75 2.80) ;
+
+## WIRE  (2.7 2.61) (2.7 2.75 ) (3.38 2.75 ) (3.38 2.61) (2.7 2.61 ) ;
+TEXT 'GND TP1 3V3  3V3' R0 (2.50 2.85) ;
+TEXT 'GND TP0 3V3  3V3' R0 (2.50 2.80) ;
+
+Window Fit;
+DRC;
