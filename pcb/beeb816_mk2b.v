@@ -47,9 +47,11 @@ module beeb816_mk2b();
 //  cap100nf c100n_1 (.p0(GND), .p1(VDD_3V3));
   cap100nf c100n_2 (.p0(VDD_SYS), .p1(GND));
   cap100nf c100n_3 (.p0(GND), .p1(VDD_SYS));
-  cap100nf c100n_4 (.p0(GND), .p1(VDD_3V3));
+//  cap100nf c100n_4 (.p0(GND), .p1(VDD_3V3));
   cap100nf_smd c100n_10 (.p0(GND), .p1(VDD_3V3));
   cap100nf_smd c100n_11 (.p0(GND), .p1(VDD_3V3));
+  cap100nf_smd c100n_12 (.p0(GND), .p1(VDD_3V3));
+  cap100nf_smd c100n_13 (.p0(GND), .p1(VDD_3V3));
 //   cap100nf_smd c100n_12 (.p0(GND), .p1(VDD_3V3));
 
   // Current limiting resistors on all 5V inputs to the CPLD  
@@ -191,7 +193,7 @@ module beeb816_mk2b();
 	                .gck3(cpu_phi2),
 	                .p28(cpu_vda),
                         .p29(cpu_irqb),
-	                .p30(cpu_nmib),
+	                .p30(),
 	                .gnd2(GND),
 	                .p32(cpu_nmib),
 	                .p33(cpu_e),
