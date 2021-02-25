@@ -40,8 +40,8 @@ module beeb816_mk2b();
   wire     tp0, tp1 ;
 
   // Radial electolytic, one each on the 5V and 3V3 supply
-  cap22uf  CAP22UF_5V(.minus(GND),.plus(VDD_5V));
-  cap22uf  CAP22UF_SYS(.minus(GND),.plus(VDD_SYS));
+  cap22uf  c22u_5V(.minus(GND),.plus(VDD_5V));
+  cap22uf  c22u_SYS(.minus(GND),.plus(VDD_SYS));
 
   // decoupling caps
 //  cap100nf c100n_1 (.p0(GND), .p1(VDD_3V3));
@@ -50,9 +50,8 @@ module beeb816_mk2b();
 //  cap100nf c100n_4 (.p0(GND), .p1(VDD_3V3));
   cap100nf_smd c100n_10 (.p0(GND), .p1(VDD_3V3));
   cap100nf_smd c100n_11 (.p0(GND), .p1(VDD_3V3));
-  cap100nf_smd c100n_12 (.p0(GND), .p1(VDD_3V3));
+//  cap100nf_smd c100n_12 (.p0(GND), .p1(VDD_3V3));
   cap100nf_smd c100n_13 (.p0(GND), .p1(VDD_3V3));
-//   cap100nf_smd c100n_12 (.p0(GND), .p1(VDD_3V3));
 
   // Current limiting resistors on all 5V inputs to the CPLD  
   vresistor r330_0 ( .p0(cpld_d0), .p1(bbc_d0) );
@@ -324,6 +323,13 @@ module beeb816_mk2b();
                   .p3(tp0),     .p4(tp1),
                   .p5(VDD_3V3), .p6(VDD_3V3),
                   .p7(VDD_3V3), .p8(VDD_3V3),
+                  );
+
+  hdr1x04   gndpt(
+                  .p1(GND),
+                  .p2(GND),
+                  .p3(GND),
+                  .p4(GND)
                   );
 
   // jtag header for in system programming (same pinout as MacMall Breakout board
