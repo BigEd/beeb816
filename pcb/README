@@ -43,7 +43,13 @@ cp design_rules_smd.dru /tmp
 ##     -u \
 ##     -f net
 ##
-jython ${NLIST_PATH}/src/netlister.py -i beeb816_mk2b.v \
+
+
+design=beeb816_mk2b
+design=bufboard
+
+
+jython ${NLIST_PATH}/src/netlister.py -i ${design}.v \
     -l "${NLIST_PATH}/lib/l1b-custom.lib" \
     -l "${NLIST_PATH}/lib/l1a-custom.lib" \
     -l "${NLIST_PATH}/lib/xilinx.lib" \
@@ -56,10 +62,10 @@ jython ${NLIST_PATH}/src/netlister.py -i beeb816_mk2b.v \
     -l "${NLIST_PATH}/lib/switches.lib" \
     -l "${NLIST_PATH}/lib/idc_connectors.lib" \
     -f scr \
-    -o beeb816_mk2b.scr \
-    -t beeb816_mk2b_footer.scr
+    -o ${design}.scr \
+    -t ${design}_footer.scr
 
-jython ${NLIST_PATH}/src/netlister.py -i beeb816_mk2b.v \
+jython ${NLIST_PATH}/src/netlister.py -i ${design}.v \
     -l "${NLIST_PATH}/lib/l1b-custom.lib" \
     -l "${NLIST_PATH}/lib/l1a-custom.lib" \
     -l "${NLIST_PATH}/lib/xilinx.lib" \
@@ -71,6 +77,7 @@ jython ${NLIST_PATH}/src/netlister.py -i beeb816_mk2b.v \
     -l "${NLIST_PATH}/lib/74series.lib" \
     -l "${NLIST_PATH}/lib/switches.lib" \
     -l "${NLIST_PATH}/lib/idc_connectors.lib" \
-    -o beeb816_mk2b.net \
+    -o ${design}.net \
     -u \
     -f net
+    

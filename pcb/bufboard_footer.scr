@@ -1,0 +1,82 @@
+# Maximum Eagle freeware board size is 4.0x3.2" (100x80mm)
+# better to work in inches for 0.1 inch pad pitch
+Grid default;
+# Grid 1.9685 mil;
+Set Wire_Bend 0;
+Layer Dimension;
+Wire 0  (0 0) (3.92 2.80) (0 0);
+Layer Top;
+
+# PCB-Pool/PCB-Train design rule is actually 0.006/0.006 for wires
+CLASS 0 signal 0.007945 0.007870 ;
+CLASS 1 supply 0.007945 0.007870 ;
+
+# PCB fixing holes
+ADD 2,8@holes H1 R0 (3.722 2.582); 
+ADD 2,8@holes H2 R0 (3.722 0.218); 
+ADD 2,8@holes H3 R0 (0.2 2.582); 
+ADD 2,8@holes H4 R0 (0.2 0.218); 
+
+
+ROTATE =R270 CON  ;
+ROTATE =R0   JTAG ;
+ROTATE =R0   gndpt;
+ROTATE =R0   TSTPT;
+ROTATE =R180 vdd_5v_lnk;
+
+MOVE vdd_5v_lnk  ( 3.40 0.15) ;
+MOVE CON         ( 3.85 1.40) ;
+MOVE TSTPT       ( 2.45 2.60) ;
+MOVE JTAG        ( 1.80 2.60) ;
+MOV  gndpt       (1.80 0.15) ;
+
+Window Fit;
+
+# Preroute VDD and GND rings
+layer top;
+wire  0.024;
+wire  'VDD_5V' (3.89 2.77 ) (0.03 2.77 ) (0.03 0.03)( 3.89 0.03) (3.89 2.77) ;
+wire  0.020;
+
+
+layer bottom;
+wire  0.024;
+wire  'GND' (3.89 2.77 ) (0.03 2.77 ) (0.03 0.03)( 3.89 0.03) (3.89 2.77) ;
+
+# load autorouter params to get finer routing grid
+DRC load /tmp/design_rules_smd.dru ;
+Auto load /tmp/fine_routing.ctl;
+AUTO
+
+## ## Define power fills top and bottom over whole board area
+layer Top;
+change Isolate 0.02 ;
+change Orphans Off ;
+polygon VDD_5V 0.020  (0 0) (0 2.8) (3.92 2.8) ( 3.92 0) ;
+layer Bottom;
+polygon GND 0.020  (0 0) (0 2.8) (3.92 2.8) ( 3.92 0) ;
+
+RatsNest;   # to show incomplete wires and polygons
+
+Layer tPlace ;
+CHANGE FONT PROPORTIONAL ;
+CHANGE SIZE 0.06 ;
+TEXT 'Beeb816 Buffer Board' R90 (0.15 0.5) ;
+CHANGE SIZE 0.04 ;
+TEXT 'http://github.com/BigEd/beeb816'  R90 (0.15 1.3) ;
+CHANGE SIZE 0.04 ;
+TEXT '(C) 2021, Revaldinho, BigEd, Hoglet'  R90 (0.22 0.5) ;
+
+CHANGE FONT FIXED ;
+CHANGE SIZE 0.03 ;
+CHANGE WIDTH 0.01 ;
+## WIRE  (1.9 2.61) (1.9 2.75 ) (2.35 2.75 ) (2.35 2.61) (1.9 2.61 ) ;
+TEXT 'GND TDI TCK NC' R0  (1.6 2.45) ;
+TEXT 'GND TMS TDO 3V3' R0 (1.6 2.40) ;
+
+## WIRE  (2.7 2.61) (2.7 2.75 ) (3.38 2.75 ) (3.38 2.61) (2.7 2.61 ) ;
+TEXT 'GND TP1 3V3  3V3' R0 (2.25 2.45) ;
+TEXT 'GND TP0 3V3  3V3' R0 (2.25 2.40) ;
+
+Window Fit;
+DRC;
