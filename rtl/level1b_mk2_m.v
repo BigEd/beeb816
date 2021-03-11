@@ -111,12 +111,12 @@ module level1b_mk2_m (
                       input          bbc_phi0,
                       input          hsclk,
                       input          cpu_rnw,
-                      inout [1:0]    j,
                       output [1:0]   tp,
 `ifdef MARK2B
                       input          rdy,
                       input          nmib,
                       input          irqb,
+                      inout [1:0]    dip,                      
                       output         cpu_rstb,
                       output         cpu_rdy,
                       output         cpu_nmib,
@@ -127,6 +127,7 @@ module level1b_mk2_m (
                       input          dec_rom_reg,
                       input          dec_fe4x,
                       inout          rdy,
+                      inout [1:0]    j,
                       inout          nmib,
                       inout          irqb,
                       output         lat_en,
@@ -195,7 +196,9 @@ module level1b_mk2_m (
   wire [ `CPLD_REG_SEL_SZ-1:0]         cpld_reg_sel_w;
   wire                                 ckdel_w;
 
+`ifndef MARK2B  
   assign j = 2'bz;
+`endif  
   // Fast RAM mode set by jumper on tp[0] unless being use as a test point
 `ifdef OBSERVE_CLOCKS
   assign tp = { bbc_phi2, cpu_phi2 };
