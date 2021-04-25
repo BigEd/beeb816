@@ -15,7 +15,7 @@
 `define FORCE_KEEP_CLOCK 1
 
 // Define to drive clocks to test points tp[1:0]
-`define OBSERVE_CLOCKS 1
+//`define OBSERVE_CLOCKS 1
 
 // Set one of these to falling edge of RAMOEB by one buffer when running with fast SRAM
 //`define DELAY_RAMOEB_BY_1
@@ -54,7 +54,7 @@
   // All-in-one CPLD - no offloading of decoding to external IC
   `define LOCAL_DECODING 1
   // Dont need to save resources so undefine this ?
-  //`undef FORCE_KEEP_CLOCK
+  `undef FORCE_KEEP_CLOCK
 `endif
 
 `ifdef LOCAL_DECODING
@@ -101,6 +101,7 @@
 `define CPLD_REG_SEL_MAP_CC_IDX 1
 `define CPLD_REG_SEL_BBC_PAGEREG_IDX 0
 
+
 module level1b_mk2_m (
                       input [15:0]   cpu_adr,
                       input          resetb,
@@ -116,7 +117,7 @@ module level1b_mk2_m (
                       input          rdy,
                       input          nmib,
                       input          irqb,
-                      inout [1:0]    dip,                      
+                      inout [1:0]    dip,
                       output         cpu_rstb,
                       output         cpu_rdy,
                       output         cpu_nmib,
@@ -196,9 +197,9 @@ module level1b_mk2_m (
   wire [ `CPLD_REG_SEL_SZ-1:0]         cpld_reg_sel_w;
   wire                                 ckdel_w;
 
-`ifndef MARK2B  
+`ifndef MARK2B
   assign j = 2'bz;
-`endif  
+`endif
   // Fast RAM mode set by jumper on tp[0] unless being use as a test point
 `ifdef OBSERVE_CLOCKS
   assign tp = { bbc_phi2, cpu_phi2 };
@@ -248,7 +249,14 @@ module level1b_mk2_m (
 
 `ifdef MARK2B
   // CPLD must do 5V/3V3 shifting on all control signals from host
-  assign cpu_irqb = irqb;
+  (* KEEP="TRUE" *) wire del_0;
+  (* KEEP="TRUE" *) wire del_1;
+  (* KEEP="TRUE" *) wire deglitch_irqb;
+  BUF    del0   ( .I(irqb), .O(del_0));
+  BUF    del1   ( .I(del_0), .O(del_1));
+  BUF    del2   ( .I(del_1), .O(deglitch_irqb));
+  assign tp[1] = deglitch_irqb;
+  assign cpu_irqb = deglitch_irqb;
   assign cpu_nmib = nmib;
   assign cpu_rdy =  rdy;
   assign cpu_rstb = resetb;

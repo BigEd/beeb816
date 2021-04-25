@@ -4,19 +4,21 @@ design=level1b_mk2_m
 design=cpld_jnr
 design=beeb816_mk2b
 
-target=xc95144xl-10-tq100
 target=xc95288xl-7-tq144
 target=xc95108-10-pc84
 target=xc9536-10-pc44
+target=xc95144xl-10-tq100
 
 # rename level1b_mk2_m board to beeb816_mk2b.v for alternate build
+rm -rf  beeb816_mk2b.v
+touch beeb816_mk2b.v
 
 startdir=`$pwd`
 if [ $# -lt 1 ]; then
     design=level1b_mk2_m
 else
     design=$1
-    if [ $design==beeb816_mkb ] ; then
+    if [ $design == beeb816_mk2b ] ; then
        sed 's/level1b_mk2_m/beeb816_mk2b/g' level1b_mk2_m.v |\
        perl -pale 's/(.*define\s+MARK2B.*)/\`define MARK2B 1/g'> beeb816_mk2b.v
     fi    
@@ -32,7 +34,10 @@ fi
 defines=""
 
 
-echo "Building for $target"
+
+
+
+echo "Building $design for $target"
 
 BUILD_SCR=../scripts/build.py
 
