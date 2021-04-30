@@ -55,3 +55,4 @@ cd $startdir
 if [[ -f "beeb816_mk2b.v" ]] ; then
     rm -rf beeb816_mk2b.v
 fi
+

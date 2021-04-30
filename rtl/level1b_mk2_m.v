@@ -22,9 +22,6 @@
 `define DELAY_RAMOEB_BY_2
 //`define DELAY_RAMOEB_BY_3
 
-// Define this to add a simple deglitch circuit to the incoming BBC clock ahead of the
-// clock switch
-`define DEGLITCH_CLOCK_IN 1
 // Define this for Master RAM overlay at 8000
 // `define MASTER_RAM_8000 1
 // Define this for Master RAM overlay at C000
@@ -205,27 +202,30 @@ module level1b_mk2_m (
   assign tp = { bbc_phi2, cpu_phi2 };
 `endif
 
-`ifdef DEGLITCH_CLOCK_IN
-  // Deglitch PHI0 input for feeding to clock switch only
+  // Deglitch PHI0 input for feeding to clock switch only (mainly helps Elk, but
+  // also provides opportunity to extend PHI1 slightly to give more time to clock
+  // switch).
   (* KEEP="TRUE" *) wire ckdel_1_b;
   (* KEEP="TRUE" *) wire ckdel_2;
   (* KEEP="TRUE" *) wire ckdel_3;
   (* KEEP="TRUE" *) wire ckdel_4;
+  (* KEEP="TRUE" *) wire ckdel_5;
+  (* KEEP="TRUE" *) wire ckdel_6;
   INV    ckdel0   ( .I(bbc_phi0), .O(ckdel_1_b));
   INV    ckdel2   ( .I(ckdel_1_b), .O(ckdel_2));
   BUF    ckdel3   ( .I(ckdel_2), .O(ckdel_3));
   BUF    ckdel4   ( .I(ckdel_3), .O(ckdel_4));
-  assign ckdel_w = !(ckdel_2 & ckdel_4);
+  BUF    ckdel5   ( .I(ckdel_4), .O(ckdel_5));
+  BUF    ckdel6   ( .I(ckdel_5), .O(ckdel_6));
+`ifdef MARK2B  
+  (* KEEP="TRUE" *) wire ckdel_7;
+  (* KEEP="TRUE" *) wire ckdel_8;
+  BUF    ckdel7   ( .I(ckdel_6), .O(ckdel_7));
+  BUF    ckdel8   ( .I(ckdel_7), .O(ckdel_8));
+  assign ckdel_w = !(ckdel_4 & ckdel_8);
 `else
-  // Force keep intermediate nets to preserve strict delay chain for clocks
-  (* KEEP="TRUE" *) wire ckdel_1_b;
-  (* KEEP="TRUE" *) wire ckdel_2;
-  (* KEEP="TRUE" *) wire ckdel_3_b;
-  INV    ckdel1   ( .I(bbc_phi0), .O(ckdel_1_b));
-  INV    ckdel2   ( .I(ckdel_1_b), .O(ckdel_2));
-  INV    ckdel3   ( .I(ckdel_2), .O(ckdel_3_b));
-  assign ckdel_w = ckdel_3_b;
-`endif
+  assign ckdel_w = !(ckdel_3 & ckdel_6);
+`endif  
 
   clkctrl_phi2 U_0 (
                     .hsclk_in(hsclk),
