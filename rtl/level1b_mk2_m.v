@@ -12,7 +12,7 @@
 `define IO_ACCESS_DELAY_SZ     3
 //
 // Define this to force-keep some clock nets to reduce design size
-`define FORCE_KEEP_CLOCK 1
+//`define FORCE_KEEP_CLOCK 1
 
 // Define to drive clocks to test points tp[1:0]
 //`define OBSERVE_CLOCKS 1
@@ -31,7 +31,7 @@
 // Trial code to make VRAM area larger than default of 20K to simplify decoding(can be used with above)
 `define VRAM_AREA_20K          (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | (cpu_adr[13]&cpu_adr[12])))
 `define VRAM_AREA_20K_N_31K    (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | ((map_data_q[`MAP_VRAM_SZ_IDX])? (cpu_adr[13]&cpu_adr[12]) : (cpu_adr[13]| cpu_adr[12] | cpu_adr[11] | cpu_adr[10]))))
-`define VRAM_AREA              `VRAM_AREA_20K_N_31K
+`define VRAM_AREA_31K          (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | (cpu_adr[13]| cpu_adr[12] | cpu_adr[11] | cpu_adr[10])))
 
 // Define this to have the host set the type field in the map register rather than define it by jumpers
 // (And remember to remove the jumpers if setting this !). Must be set for MARK2B board
@@ -41,7 +41,6 @@
 // for the Mark2B board.
 // `define LOCAL_DECODING 1
 
-
 `ifdef MARK2B
   // Enable MASTER code
   `define MASTER_RAM_8000 1
@@ -50,9 +49,15 @@
   `define HOST_SET_OWN_TYPE 1
   // All-in-one CPLD - no offloading of decoding to external IC
   `define LOCAL_DECODING 1
-  // Dont need to save resources so undefine this ?
-  `undef FORCE_KEEP_CLOCK
-`endif
+  // Remove this definition to improve MHz at cost of logic
+  `undef FORCE_KEEP_CLOCK 
+  // Programmable VRAM area
+  `define VRAM_AREA              `VRAM_AREA_20K_N_31K
+`else // MK2A settings
+  // Fix VRAM Area at most compatible 31K setting
+  `define VRAM_AREA              `VRAM_AREA_31K
+`endif //  `ifdef MARK2B
+
 
 `ifdef LOCAL_DECODING
   `define ELK_PAGED_ROM_SEL 16'hFE05
@@ -62,7 +67,7 @@
   `define DECODED_ROM_REG     ((`L1_ELK_MODE)? (cpu_adr==`ELK_PAGED_ROM_SEL) : (cpu_adr==`PAGED_ROM_SEL))
   // Flag FE4x (VIA) accesses and also all &FC, &FD expansion pages
   `define DECODED_FE4X        ((cpu_adr[15:4]==12'hFE4) || (cpu_adr[15:9]==7'b1111_110))
-`else
+`else // !`ifdef LOCAL_DECODING
   `define DECODED_SHADOW_REG dec_shadow_reg
   `define DECODED_ROM_REG    dec_rom_reg
   `define DECODED_FE4X       dec_fe4x
@@ -197,35 +202,43 @@ module level1b_mk2_m (
 `ifndef MARK2B
   assign j = 2'bz;
 `endif
-  // Fast RAM mode set by jumper on tp[0] unless being use as a test point
 `ifdef OBSERVE_CLOCKS
   assign tp = { bbc_phi2, cpu_phi2 };
 `endif
 
   // Deglitch PHI0 input for feeding to clock switch only (mainly helps Elk, but
   // also provides opportunity to extend PHI1 slightly to give more time to clock
-  // switch).
+  // switch). Delay needed to CPU clock because 1MHz clock is much delayed on the
+  // motherboard and hold fails occur on 1Mhz bus otherwise.
   (* KEEP="TRUE" *) wire ckdel_1_b;
   (* KEEP="TRUE" *) wire ckdel_2;
   (* KEEP="TRUE" *) wire ckdel_3;
   (* KEEP="TRUE" *) wire ckdel_4;
   (* KEEP="TRUE" *) wire ckdel_5;
   (* KEEP="TRUE" *) wire ckdel_6;
+  (* KEEP="TRUE" *) wire ckdel_7;
+  (* KEEP="TRUE" *) wire ckdel_8;
+  (* KEEP="TRUE" *) wire ckdel_9;
   INV    ckdel0   ( .I(bbc_phi0), .O(ckdel_1_b));
   INV    ckdel2   ( .I(ckdel_1_b), .O(ckdel_2));
   BUF    ckdel3   ( .I(ckdel_2), .O(ckdel_3));
   BUF    ckdel4   ( .I(ckdel_3), .O(ckdel_4));
   BUF    ckdel5   ( .I(ckdel_4), .O(ckdel_5));
   BUF    ckdel6   ( .I(ckdel_5), .O(ckdel_6));
-`ifdef MARK2B  
-  (* KEEP="TRUE" *) wire ckdel_7;
-  (* KEEP="TRUE" *) wire ckdel_8;
   BUF    ckdel7   ( .I(ckdel_6), .O(ckdel_7));
   BUF    ckdel8   ( .I(ckdel_7), .O(ckdel_8));
-  assign ckdel_w = !(ckdel_4 & ckdel_8);
+  BUF    ckdel9   ( .I(ckdel_8), .O(ckdel_9));
+`ifdef MARK2B
+  (* KEEP="TRUE" *) wire ckdel_10;
+  (* KEEP="TRUE" *) wire ckdel_11;
+  (* KEEP="TRUE" *) wire ckdel_12;
+  BUF    ckdel10   ( .I(ckdel_9), .O(ckdel_10));
+  BUF    ckdel11   ( .I(ckdel_10), .O(ckdel_11));
+  BUF    ckdel12   ( .I(ckdel_11), .O(ckdel_12));
+  assign ckdel_w = !(ckdel_9 & ckdel_12);
 `else
-  assign ckdel_w = !(ckdel_3 & ckdel_6);
-`endif  
+  assign ckdel_w = !(ckdel_7 & ckdel_9);
+`endif
 
   clkctrl_phi2 U_0 (
                     .hsclk_in(hsclk),
@@ -249,14 +262,7 @@ module level1b_mk2_m (
 
 `ifdef MARK2B
   // CPLD must do 5V/3V3 shifting on all control signals from host
-  (* KEEP="TRUE" *) wire del_0;
-  (* KEEP="TRUE" *) wire del_1;
-  (* KEEP="TRUE" *) wire deglitch_irqb;
-  BUF    del0   ( .I(irqb), .O(del_0));
-  BUF    del1   ( .I(del_0), .O(del_1));
-  BUF    del2   ( .I(del_1), .O(deglitch_irqb));
-  assign tp[1] = deglitch_irqb;
-  assign cpu_irqb = deglitch_irqb;
+  assign cpu_irqb = irqb;
   assign cpu_nmib = nmib;
   assign cpu_rdy =  rdy;
   assign cpu_rstb = resetb;
@@ -303,7 +309,6 @@ module level1b_mk2_m (
   assign cpld_reg_sel_d[`CPLD_REG_SEL_MAP_CC_IDX] =  ( cpu_data[7:6]== 2'b10);
   assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_PAGEREG_IDX] = (cpu_data[7]== 1'b0) && `DECODED_ROM_REG ;
   assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_SHADOW_IDX] = (cpu_data[7]== 1'b0) && `DECODED_SHADOW_REG ;
-
   // Force dummy read access when accessing himem explicitly but not for remapped RAM accesses which can still complete
 `ifdef MARK2B
   assign bbc_adr = { (dummy_access_w) ? 16'hC000 : cpu_adr };
@@ -340,6 +345,7 @@ module level1b_mk2_m (
 `else
   assign himem_w =  cpu_hiaddr_lat_q[7] & (!himem_vram_wr_lat_q | cpu_rnw | map_data_q[`SHADOW_MEM_IDX]);
 `endif
+
   assign hisync_w = (cpu_vpa&cpu_vda) & cpu_hiaddr_lat_q[7];
   assign sel_hs_w = (( hisync_w & !io_access_pipe_q[0] ) |
                      ( himem_w & hs_selected_w) |
@@ -533,7 +539,7 @@ module level1b_mk2_m (
       else
         // mos_vdu_sync_q always zerod in non-shadow mode
         mos_vdu_sync_q <= 1'b0;
-    end
+    end // if ( cpu_vpa & cpu_vda )
 
   // Latches for the high address bits open during PHI1
   always @ ( * )
