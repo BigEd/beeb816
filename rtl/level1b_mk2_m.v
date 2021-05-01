@@ -41,6 +41,9 @@
 // for the Mark2B board.
 // `define LOCAL_DECODING 1
 
+// Try SYNC delay chain
+`define SYNC_CLK_DELAY 1
+
 `ifdef MARK2B
   // Enable MASTER code
   `define MASTER_RAM_8000 1
@@ -50,7 +53,7 @@
   // All-in-one CPLD - no offloading of decoding to external IC
   `define LOCAL_DECODING 1
   // Remove this definition to improve MHz at cost of logic
-  `undef FORCE_KEEP_CLOCK 
+  `undef FORCE_KEEP_CLOCK
   // Programmable VRAM area
   `define VRAM_AREA              `VRAM_AREA_20K_N_31K
 `else // MK2A settings
@@ -206,12 +209,23 @@ module level1b_mk2_m (
   assign tp = { bbc_phi2, cpu_phi2 };
 `endif
 
+
   // Deglitch PHI0 input for feeding to clock switch only (mainly helps Elk, but
   // also provides opportunity to extend PHI1 slightly to give more time to clock
   // switch). Delay needed to CPU clock because 1MHz clock is much delayed on the
   // motherboard and hold fails occur on 1Mhz bus otherwise.
   (* KEEP="TRUE" *) wire ckdel_1_b;
   (* KEEP="TRUE" *) wire ckdel_2;
+  INV    ckdel0   ( .I(bbc_phi0), .O(ckdel_1_b));
+  INV    ckdel2   ( .I(ckdel_1_b), .O(ckdel_2));
+
+`ifdef SYNC_CLK_DELAY
+  reg [2:0]                            del_q;
+  always @ (posedge hsclk) begin
+    del_q <= { bbc_phi0 & ckdel_2, del_q[2:1]};
+  end
+  assign ckdel_w = !del_q[0];
+`else
   (* KEEP="TRUE" *) wire ckdel_3;
   (* KEEP="TRUE" *) wire ckdel_4;
   (* KEEP="TRUE" *) wire ckdel_5;
@@ -219,8 +233,6 @@ module level1b_mk2_m (
   (* KEEP="TRUE" *) wire ckdel_7;
   (* KEEP="TRUE" *) wire ckdel_8;
   (* KEEP="TRUE" *) wire ckdel_9;
-  INV    ckdel0   ( .I(bbc_phi0), .O(ckdel_1_b));
-  INV    ckdel2   ( .I(ckdel_1_b), .O(ckdel_2));
   BUF    ckdel3   ( .I(ckdel_2), .O(ckdel_3));
   BUF    ckdel4   ( .I(ckdel_3), .O(ckdel_4));
   BUF    ckdel5   ( .I(ckdel_4), .O(ckdel_5));
@@ -239,6 +251,7 @@ module level1b_mk2_m (
 `else
   assign ckdel_w = !(ckdel_7 & ckdel_9);
 `endif
+`endif // !`ifdef SYNC_CLK_DELAY
 
   clkctrl_phi2 U_0 (
                     .hsclk_in(hsclk),

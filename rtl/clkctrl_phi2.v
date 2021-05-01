@@ -23,7 +23,7 @@
 // of PHI2
 //
 //Define this to enable div/4
-//`define DIV4
+`define DIV4
 
 `define USE_LATCH_ON_CLKSEL 1
 
@@ -39,9 +39,9 @@ module clkctrl_phi2(
                output      clkout
                );
   reg                      div2_q;
-`ifdef DIV4  
+`ifdef DIV4
   reg                      div4_q;
-`endif  
+`endif
   reg                     hs_enable_q, ls_enable_q;
   reg                     selected_ls_q;
   reg                     selected_hs_q;
@@ -67,11 +67,11 @@ module clkctrl_phi2(
 `else
   assign hsclk_selected = hs_enable_q;
 `endif
-`ifdef DIV4  
+`ifdef DIV4
   assign cpuclk_w = (cpuclk_div_sel==2'b00)? hsclk_in : (cpuclk_div_sel[1]) ? div4_q : div2_q;
-`else  
+`else
   assign cpuclk_w = (cpuclk_div_sel==2'b00)? hsclk_in : div2_q;
-`endif   
+`endif
   // Selected LS signal must change on posedge of clock
   always @ (posedge lsclk_in or negedge rst_b)
     if ( ! rst_b )
@@ -135,13 +135,13 @@ module clkctrl_phi2(
       div2_q = 1'b0;
     else
       div2_q = !div2_q;
-  
-`ifdef DIV4  
+
+`ifdef DIV4
   always @ ( posedge div2_q or negedge rst_b)
     if ( !rst_b)
       div4_q = 1'b0;
     else
       div4_q = !div4_q;
 `endif
-   
+
 endmodule
