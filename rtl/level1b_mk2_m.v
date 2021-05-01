@@ -235,7 +235,7 @@ module level1b_mk2_m (
   BUF    ckdel10   ( .I(ckdel_9), .O(ckdel_10));
   BUF    ckdel11   ( .I(ckdel_10), .O(ckdel_11));
   BUF    ckdel12   ( .I(ckdel_11), .O(ckdel_12));
-  assign ckdel_w = !(ckdel_9 & ckdel_12);
+  assign ckdel_w = !(ckdel_10 & ckdel_12);
 `else
   assign ckdel_w = !(ckdel_7 & ckdel_9);
 `endif
