@@ -218,40 +218,7 @@ module level1b_mk2_m (
   (* KEEP="TRUE" *) wire ckdel_2;
   INV    ckdel0   ( .I(bbc_phi0), .O(ckdel_1_b));
   INV    ckdel2   ( .I(ckdel_1_b), .O(ckdel_2));
-
-`ifdef SYNC_CLK_DELAY
-  reg [2:0]                            del_q;
-  always @ (posedge hsclk) begin
-    del_q <= { bbc_phi0 & ckdel_2, del_q[2:1]};
-  end
-  assign ckdel_w = !del_q[0];
-`else
-  (* KEEP="TRUE" *) wire ckdel_3;
-  (* KEEP="TRUE" *) wire ckdel_4;
-  (* KEEP="TRUE" *) wire ckdel_5;
-  (* KEEP="TRUE" *) wire ckdel_6;
-  (* KEEP="TRUE" *) wire ckdel_7;
-  (* KEEP="TRUE" *) wire ckdel_8;
-  (* KEEP="TRUE" *) wire ckdel_9;
-  BUF    ckdel3   ( .I(ckdel_2), .O(ckdel_3));
-  BUF    ckdel4   ( .I(ckdel_3), .O(ckdel_4));
-  BUF    ckdel5   ( .I(ckdel_4), .O(ckdel_5));
-  BUF    ckdel6   ( .I(ckdel_5), .O(ckdel_6));
-  BUF    ckdel7   ( .I(ckdel_6), .O(ckdel_7));
-  BUF    ckdel8   ( .I(ckdel_7), .O(ckdel_8));
-  BUF    ckdel9   ( .I(ckdel_8), .O(ckdel_9));
-`ifdef MARK2B
-  (* KEEP="TRUE" *) wire ckdel_10;
-  (* KEEP="TRUE" *) wire ckdel_11;
-  (* KEEP="TRUE" *) wire ckdel_12;
-  BUF    ckdel10   ( .I(ckdel_9), .O(ckdel_10));
-  BUF    ckdel11   ( .I(ckdel_10), .O(ckdel_11));
-  BUF    ckdel12   ( .I(ckdel_11), .O(ckdel_12));
-  assign ckdel_w = !(ckdel_10 & ckdel_12);
-`else
-  assign ckdel_w = !(ckdel_7 & ckdel_9);
-`endif
-`endif // !`ifdef SYNC_CLK_DELAY
+  assign ckdel_w = !(bbc_phi0 & ckdel_2);
 
   clkctrl_phi2 U_0 (
                     .hsclk_in(hsclk),
