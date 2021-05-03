@@ -12,7 +12,7 @@
 `define IO_ACCESS_DELAY_SZ     3
 //
 // Define this to force-keep some clock nets to reduce design size
-//`define FORCE_KEEP_CLOCK 1
+`define FORCE_KEEP_CLOCK 1
 
 // Define to drive clocks to test points tp[1:0]
 //`define OBSERVE_CLOCKS 1

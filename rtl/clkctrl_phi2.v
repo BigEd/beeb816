@@ -2,17 +2,15 @@
 //
 
 // Number of retiming steps of fast clock for low speed clock enable.
-//`define HS_PIPE_SZ 4
-`define HS_PIPE_SZ 3
+`define HS_PIPE_SZ 4
 
 // Define this to use a latch open in second half of clock cycle to allow more time for
 // clock selection decision. If undefined then clock decision is FF'd on leading edge
 // of PHI2
 `define USE_LATCH_ON_CLKSEL 1
 
-// Define this to use FULLY SYNC divider
-`define SYNC_DIVIDER 1
-
+// Size of clock delay pipe - needs to be 2 for the Master but 3 for BBC /Elk ? TBC
+`define CLKDEL_PIPE_SZ 3
 
 module clkctrl_phi2(
                input       hsclk_in,
@@ -32,9 +30,9 @@ module clkctrl_phi2(
   reg                      selected_hs_q;
   reg [`HS_PIPE_SZ-1:0]    retimed_ls_enable_q;
   reg                      retimed_hs_enable_q;
-  reg [2:0]                del_q;
-  wire                     retimed_ls_enable_w = retimed_ls_enable_q[0];
-  wire                     retimed_hs_enable_w = retimed_hs_enable_q;
+  reg [`CLKDEL_PIPE_SZ-1:0] del_q;
+  wire                      retimed_ls_enable_w = retimed_ls_enable_q[0];
+  wire                      retimed_hs_enable_w = retimed_hs_enable_q;
 
   // Force Keep clock nets to prevent ISE merging divider logic into other equations and
   // causing timing issues
@@ -49,7 +47,7 @@ module clkctrl_phi2(
 
   // Delay the host clock to match delays on the motherboard
   always @ (posedge hsclk_in) begin
-    del_q <= { lsclk_in, del_q[2:1]};
+    del_q <= { lsclk_in, del_q[`CLKDEL_PIPE_SZ-1:1]};
   end
 
   // Selected LS signal must change on posedge of clock
@@ -97,13 +95,12 @@ module clkctrl_phi2(
     else
       retimed_hs_enable_q <= 1'b0;
 
-  always @ ( negedge  cpuclk_w )
-    if ( !rst_b  || ls_enable_q)
+  always @ ( negedge cpuclk_w )
+    if (ls_enable_q)
       retimed_ls_enable_q <= {`HS_PIPE_SZ{1'b1}};
     else
       retimed_ls_enable_q <= {1'b0, retimed_ls_enable_q[`HS_PIPE_SZ-1:1]};
 
-`ifdef SYNC_DIVIDER
   // Clock Dividers
   always @ ( * ) begin
     clkdiv_d[2] = !clkdiv_q[0] ;
@@ -116,22 +113,5 @@ module clkctrl_phi2(
       clkdiv_q <= 3'b0;
     else
       clkdiv_q <= clkdiv_d;
-
-`else // !`ifdef SYNC_DIVIDER
-
-// Predivider
-  always @ ( hsclk_in )
-    clkdiv_q[2] = !clkdiv_q[2];
-
-  always @ ( * ) begin
-    clkdiv_d[1] = !clkdiv_q[0] ;
-    clkdiv_d[0] = (cpuclk_div_sel == 2'b00) ? !clkdiv_q[0] : clkdiv_q[1];
-  end
-
-  always @ ( posedge clkdiv_q[2] )
-    clkdiv_q <= clkdiv_d;
-
-`endif
-
 
 endmodule
