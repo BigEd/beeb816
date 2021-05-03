@@ -33,9 +33,10 @@
 `define VRAM_AREA_20K_N_31K    (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | ((map_data_q[`MAP_VRAM_SZ_IDX])? (cpu_adr[13]&cpu_adr[12]) : (cpu_adr[13]| cpu_adr[12] | cpu_adr[11] | cpu_adr[10]))))
 `define VRAM_AREA_31K          (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | (cpu_adr[13]| cpu_adr[12] | cpu_adr[11] | cpu_adr[10])))
 
-// Define this to have the host set the type field in the map register rather than define it by jumpers
-// (And remember to remove the jumpers if setting this !). Must be set for MARK2B board
-// `define HOST_SET_OWN_TYPE 1
+// Define this to have the host set the type field in the map register rather than define it by jumpers and
+// leave the jumpers available to set the divider ratio on start-up.
+`define HOST_SET_OWN_TYPE 1
+
 // Define this to bring decoding back into the main CPLD (mainly for capacity evaluation). Note
 // that the address lsb latches are still assumed external to keep the same pin out. Must be defined
 // for the Mark2B board.
@@ -48,8 +49,6 @@
   // Enable MASTER code
   `define MASTER_RAM_8000 1
   `define MASTER_RAM_C000 1
-  // Host sets machine type on boot - ignore jumpers
-  `define HOST_SET_OWN_TYPE 1
   // All-in-one CPLD - no offloading of decoding to external IC
   `define LOCAL_DECODING 1
   // Remove this definition to improve MHz at cost of logic
@@ -87,6 +86,7 @@
   `define L1_BPLUS_MODE  (j[1:0]==2'b01)
   `define L1_ELK_MODE    (j[1:0]==2'b10)
   `define L1_MASTER_MODE (j[1:0]==2'b11)
+  `define DIV_RESET_VAL  (2'b00)
 `endif
 
 `define MAP_CC_DATA_SZ         8
@@ -117,12 +117,12 @@ module level1b_mk2_m (
                       input          bbc_phi0,
                       input          hsclk,
                       input          cpu_rnw,
+                      input [1:0]    j, 
                       output [1:0]   tp,
 `ifdef MARK2B
                       input          rdy,
                       input          nmib,
                       input          irqb,
-                      inout [1:0]    dip,
                       output         cpu_rstb,
                       output         cpu_rdy,
                       output         cpu_nmib,
@@ -133,7 +133,6 @@ module level1b_mk2_m (
                       input          dec_rom_reg,
                       input          dec_fe4x,
                       inout          rdy,
-                      inout [1:0]    j,
                       inout          nmib,
                       inout          irqb,
                       output         lat_en,
@@ -198,17 +197,12 @@ module level1b_mk2_m (
   wire                                 native_mode_int_w;
   wire                                 himem_w;
   wire                                 hisync_w;
-  wire                                 sw_rdy_w;
   wire [ `CPLD_REG_SEL_SZ-1:0]         cpld_reg_sel_w;
   wire                                 ckdel_w;
 
-`ifndef MARK2B
-  assign j = 2'bz;
-`endif
 `ifdef OBSERVE_CLOCKS
   assign tp = { bbc_phi2, cpu_phi2 };
 `endif
-
 
   // Deglitch PHI0 input for feeding to clock switch only (mainly helps Elk, but
   // also provides opportunity to extend PHI1 slightly to give more time to clock
@@ -228,7 +222,6 @@ module level1b_mk2_m (
                     .cpuclk_div_sel(map_data_q[`CLK_CPUCLK_DIV_IDX_HI:`CLK_CPUCLK_DIV_IDX_LO]),
                     .hsclk_selected(hs_selected_w),
                     .lsclk_selected(ls_selected_w),
-                    .rdy(sw_rdy_w),
                     .clkout(cpu_phi1_w)
                     );
 
@@ -411,13 +404,8 @@ module level1b_mk2_m (
 	    cpu_data_r[`MAP_HSCLK_EN_IDX]      = map_data_q[`MAP_HSCLK_EN_IDX] ;
 	    cpu_data_r[`MAP_VRAM_SZ_IDX]       = map_data_q[`MAP_VRAM_SZ_IDX] ;
 	    cpu_data_r[`SHADOW_MEM_IDX]        = map_data_q[`SHADOW_MEM_IDX];
-`ifdef  HOST_SET_OWN_TYPE
             cpu_data_r[`JUMPER_1_IDX]          = map_data_q[`JUMPER_1_IDX];
             cpu_data_r[`JUMPER_0_IDX]          = map_data_q[`JUMPER_0_IDX];
-`else
-            cpu_data_r[`JUMPER_1_IDX]          = j[1];
-            cpu_data_r[`JUMPER_0_IDX]          = j[0];
-`endif
 	    cpu_data_r[`MAP_ROM_IDX]           = map_data_q[`MAP_ROM_IDX];
 	    cpu_data_r[`CLK_CPUCLK_DIV_IDX_HI] = map_data_q[`CLK_CPUCLK_DIV_IDX_HI];
 	    cpu_data_r[`CLK_CPUCLK_DIV_IDX_LO] = map_data_q[`CLK_CPUCLK_DIV_IDX_LO];
@@ -435,10 +423,27 @@ module level1b_mk2_m (
   // All inferred flops and latches below this point
   // -------------------------------------------------------------
   // Internal registers update on the rising edge of cpu_phi1
-  always @ ( negedge cpu_phi2_w or negedge resetb )
+  always @ ( negedge cpu_phi2_w )
+    // Synchronous reset for this register
     if ( !resetb )
       begin
-        map_data_q <= {`MAP_CC_DATA_SZ{1'b0}};
+	map_data_q[`MAP_HSCLK_EN_IDX]       <= 1'b0;
+	map_data_q[`SHADOW_MEM_IDX]         <= 1'b0;
+	map_data_q[`MAP_VRAM_SZ_IDX]        <= 1'b0;
+	map_data_q[`MAP_ROM_IDX]            <= 1'b0;
+`ifdef HOST_SET_OWN_TYPE
+        // Use DIP/jumpers to select divider ratio on startup
+	map_data_q[`JUMPER_1_IDX]           <= 1'b0;
+	map_data_q[`JUMPER_0_IDX]           <= 1'b0;
+	map_data_q[`CLK_CPUCLK_DIV_IDX_HI]  <= j[1];
+	map_data_q[`CLK_CPUCLK_DIV_IDX_LO]  <= j[0];        
+`else
+        // Use DIP/jumpers to select machine type on startup
+	map_data_q[`JUMPER_1_IDX]           <= j[1];
+	map_data_q[`JUMPER_0_IDX]           <= j[0];
+	map_data_q[`CLK_CPUCLK_DIV_IDX_HI]  <= 1'b0;
+	map_data_q[`CLK_CPUCLK_DIV_IDX_LO]  <= 1'b0;        
+`endif                                             
         bbc_pagereg_q <= {`BBC_PAGEREG_SZ{1'b0}};
 `ifdef MASTER_RAM_8000
         ram_at_8000 <= 1'b0;
@@ -449,19 +454,8 @@ module level1b_mk2_m (
       end
     else
       begin
-        if (cpld_reg_sel_w[`CPLD_REG_SEL_MAP_CC_IDX] & !cpu_rnw) begin
-          // Not all bits are used so assign explicitly
-	  map_data_q[`MAP_HSCLK_EN_IDX]       <= cpu_data[`MAP_HSCLK_EN_IDX] ;
-	  map_data_q[`SHADOW_MEM_IDX]         <= cpu_data[`SHADOW_MEM_IDX];
-	  map_data_q[`MAP_VRAM_SZ_IDX]        <= cpu_data[`MAP_VRAM_SZ_IDX];
-	  map_data_q[`MAP_ROM_IDX]            <= cpu_data[`MAP_ROM_IDX];
-`ifdef HOST_SET_OWN_TYPE
-	  map_data_q[`JUMPER_1_IDX]           <= cpu_data[`JUMPER_1_IDX];
-	  map_data_q[`JUMPER_0_IDX]           <= cpu_data[`JUMPER_0_IDX];
-`endif
-	  map_data_q[`CLK_CPUCLK_DIV_IDX_HI]  <= cpu_data[`CLK_CPUCLK_DIV_IDX_HI];
-	  map_data_q[`CLK_CPUCLK_DIV_IDX_LO]  <= cpu_data[`CLK_CPUCLK_DIV_IDX_LO];
-        end
+        if (cpld_reg_sel_w[`CPLD_REG_SEL_MAP_CC_IDX] & !cpu_rnw)
+	  map_data_q <= cpu_data;
         else if (cpld_reg_sel_w[`CPLD_REG_SEL_BBC_PAGEREG_IDX] & !cpu_rnw ) begin
           bbc_pagereg_q <= cpu_data;
 `ifdef MASTER_RAM_8000
