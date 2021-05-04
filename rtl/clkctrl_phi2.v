@@ -1,10 +1,4 @@
 // Switch stops the clock in the PHI2 state
-//
-
-// Define this to use a latch open in second half of clock cycle to allow more time for
-// clock selection decision. If undefined then clock decision is FF'd on leading edge
-// of PHI2
-`define USE_LATCH_ON_CLKSEL 1
 
 // Size of clock delay pipe - needs to be 2 for the Master but 3 for BBC /Elk ? TBC
 `define CLKDEL_PIPE_SZ 3
@@ -59,24 +53,14 @@ module clkctrl_phi2(
     else
       selected_hs_q <= hs_enable_q;
 
-`ifdef USE_LATCH_ON_CLKSEL
-  // Make HS enable latch open in 2nd half of cycle, to allow more time
-  // for selection signal to stabilize. (Remember that clock sense is
-  // inverted here - first phase is high, second phase is low)
-  always @ (  *  )
-    if ( !cpuclk_w ) begin
-      if ( ! rst_b )
-        hs_enable_q <= 1'b0;
-      else
-        hs_enable_q <= hsclk_sel & !retimed_ls_enable_q;
-    end
-`else
-  always @ ( negedge cpuclk_w or negedge rst_b )
-    if ( ! rst_b )
+  // Simulate a latch transparent on low cpuclk_w by oversampling
+  // with hsclk_in - allowing max time for hsclk_sel to stabilize
+  // before being used to gate the clock.
+  always @ ( posedge hsclk_in or negedge rst_b )
+    if ( !rst_b )
       hs_enable_q <= 1'b0;
-    else
+    else if ( !cpuclk_w )
       hs_enable_q <= hsclk_sel & !retimed_ls_enable_q;
-`endif
 
   always @ ( negedge lsclk_del_w or negedge rst_b )
     if ( ! rst_b )
