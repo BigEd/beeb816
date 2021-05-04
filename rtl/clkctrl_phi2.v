@@ -1,9 +1,6 @@
 // Switch stops the clock in the PHI2 state
 //
 
-// Number of retiming steps of fast clock for low speed clock enable.
-`define HS_PIPE_SZ 4
-
 // Define this to use a latch open in second half of clock cycle to allow more time for
 // clock selection decision. If undefined then clock decision is FF'd on leading edge
 // of PHI2
@@ -28,11 +25,9 @@ module clkctrl_phi2(
   reg                      hs_enable_q, ls_enable_q;
   reg                      selected_ls_q;
   reg                      selected_hs_q;
-  reg [`HS_PIPE_SZ-1:0]    retimed_ls_enable_q;
+  reg                      retimed_ls_enable_q;
   reg                      retimed_hs_enable_q;
   reg [`CLKDEL_PIPE_SZ-1:0] del_q;
-  wire                      retimed_ls_enable_w = retimed_ls_enable_q[0];
-  wire                      retimed_hs_enable_w = retimed_hs_enable_q;
 
   // Force Keep clock nets to prevent ISE merging divider logic into other equations and
   // causing timing issues
@@ -55,7 +50,7 @@ module clkctrl_phi2(
     if ( ! rst_b )
       selected_ls_q <= 1'b1;
     else
-      selected_ls_q <= !hsclk_sel & !retimed_hs_enable_w;
+      selected_ls_q <= !hsclk_sel & !retimed_hs_enable_q;
 
   // Edge triggered FF for feedback to clock selection
   always @ ( posedge cpuclk_w or negedge rst_b )
@@ -73,33 +68,33 @@ module clkctrl_phi2(
       if ( ! rst_b )
         hs_enable_q <= 1'b0;
       else
-        hs_enable_q <= hsclk_sel & !retimed_ls_enable_w;
+        hs_enable_q <= hsclk_sel & !retimed_ls_enable_q;
     end
 `else
   always @ ( negedge cpuclk_w or negedge rst_b )
     if ( ! rst_b )
       hs_enable_q <= 1'b0;
     else
-      hs_enable_q <= hsclk_sel & !retimed_ls_enable_w;
+      hs_enable_q <= hsclk_sel & !retimed_ls_enable_q;
 `endif
 
   always @ ( negedge lsclk_del_w or negedge rst_b )
     if ( ! rst_b )
       ls_enable_q <= 1'b1;
     else
-      ls_enable_q <= !hsclk_sel & !retimed_hs_enable_w;
+      ls_enable_q <= !hsclk_sel & !retimed_hs_enable_q;
 
   always @ ( negedge  lsclk_del_w or posedge hs_enable_q )
     if ( hs_enable_q )
       retimed_hs_enable_q <= 1'b1;
     else
-      retimed_hs_enable_q <= 1'b0;
+      retimed_hs_enable_q <= selected_hs_q;
 
   always @ ( negedge cpuclk_w )
     if (ls_enable_q)
-      retimed_ls_enable_q <= {`HS_PIPE_SZ{1'b1}};
+      retimed_ls_enable_q <= 1'b1;
     else
-      retimed_ls_enable_q <= {1'b0, retimed_ls_enable_q[`HS_PIPE_SZ-1:1]};
+      retimed_ls_enable_q <= selected_ls_q;  
 
   // Clock Dividers
   always @ ( * ) begin
