@@ -29,7 +29,6 @@ module clkctrl_phi2(
   (* KEEP="TRUE" *) wire  lsclk_del_w;
   BUF cpuclkbuf  ( .O(cpuclk_w), .I(clkdiv_q[0]));
   BUF lsclkbuf   ( .O(lsclk_del_w), .I(del_q[0]));
-
   assign clkout = (cpuclk_w & hs_enable_q) | (lsclk_del_w & ls_enable_q);
   assign lsclk_selected = selected_ls_q;
   assign hsclk_selected = selected_hs_q;
@@ -78,7 +77,7 @@ module clkctrl_phi2(
     if (ls_enable_q)
       retimed_ls_enable_q <= 1'b1;
     else
-      retimed_ls_enable_q <= selected_ls_q;  
+      retimed_ls_enable_q <= selected_ls_q;
 
   // Clock Dividers
   always @ ( * ) begin
