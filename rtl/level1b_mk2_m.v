@@ -41,9 +41,6 @@
 // for the Mark2B board.
 // `define LOCAL_DECODING 1
 
-// Try SYNC delay chain
-`define SYNC_CLK_DELAY 1
-
 `ifdef MARK2B
   // Enable MASTER code
   `define MASTER_RAM_8000 1
@@ -76,8 +73,8 @@
 `define MAP_ROM_IDX                   4
 `define SPARE_IDX                     3
 `define MAP_HSCLK_EN_IDX              2
-`define CLK_CPUCLK_DIV_IDX_HI         1
-`define CLK_CPUCLK_DIV_IDX_LO         0
+`define CLK_DELAY_IDX                 1
+`define CLK_CPUCLK_DIV_IDX            0
 
 `define BBC_PAGEREG_SZ                4    // only the bottom four ROM selection bits
 `define CPLD_REG_SEL_SZ               3
@@ -198,23 +195,34 @@ module level1b_mk2_m (
   INV    ckdel2   ( .I(ckdel_1_b), .O(ckdel_2));
   assign ckdel_w = !(bbc_phi0 & ckdel_2);
 
+`define XC95108_7 1
+`ifdef XC95108_7
+  (* KEEP="TRUE" *) wire ckdel_3_b;
+  (* KEEP="TRUE" *) wire ckdel_4;
+  INV    ckdel3   ( .I(ckdel_2), .O(ckdel_3_b));
+  INV    ckdel4   ( .I(ckdel_3_b), .O(ckdel_4));
+  assign bbc_phi1 = ckdel_3_b;
+  assign bbc_phi2 = ckdel_4;
+`else
+  assign bbc_phi1 = ckdel_1_b;
+  assign bbc_phi2 = !ckdel_1_b;
+`endif
+
   clkctrl_phi2 U_0 (
                     .hsclk_in(hsclk),
                     .lsclk_in(ckdel_w),
                     .rst_b(resetb),
                     .hsclk_sel(sel_hs_w),
-                    .cpuclk_div_sel(map_data_q[`CLK_CPUCLK_DIV_IDX_HI:`CLK_CPUCLK_DIV_IDX_LO]),
+                    .delay_sel(map_data_q[`CLK_DELAY_IDX]),
+                    .cpuclk_div_sel(map_data_q[`CLK_CPUCLK_DIV_IDX]),
                     .hsclk_selected(hs_selected_w),
                     .lsclk_selected(ls_selected_w),
                     .clkout(cpu_phi1_w)
                     );
 
-  assign bbc_phi1 = ckdel_1_b;
-  assign bbc_phi2 = !ckdel_1_b;
 
   assign cpu_phi2_w = !cpu_phi1_w ;
   assign cpu_phi2 =  cpu_phi2_w ;
-
   assign bbc_sync = cpu_vpa & cpu_vda;
 
 `ifdef MARK2B
@@ -388,11 +396,11 @@ module level1b_mk2_m (
 	    cpu_data_r[`MAP_HSCLK_EN_IDX]      = map_data_q[`MAP_HSCLK_EN_IDX] ;
 	    cpu_data_r[`SPARE_IDX]             = 1'b0;
 	    cpu_data_r[`SHADOW_MEM_IDX]        = map_data_q[`SHADOW_MEM_IDX];
-            cpu_data_r[`HOST_TYPE_1_IDX]          = map_data_q[`HOST_TYPE_1_IDX];
-            cpu_data_r[`HOST_TYPE_0_IDX]          = map_data_q[`HOST_TYPE_0_IDX];
+            cpu_data_r[`HOST_TYPE_1_IDX]       = map_data_q[`HOST_TYPE_1_IDX];
+            cpu_data_r[`HOST_TYPE_0_IDX]       = map_data_q[`HOST_TYPE_0_IDX];
 	    cpu_data_r[`MAP_ROM_IDX]           = map_data_q[`MAP_ROM_IDX];
-	    cpu_data_r[`CLK_CPUCLK_DIV_IDX_HI] = map_data_q[`CLK_CPUCLK_DIV_IDX_HI];
-	    cpu_data_r[`CLK_CPUCLK_DIV_IDX_LO] = map_data_q[`CLK_CPUCLK_DIV_IDX_LO];
+	    cpu_data_r[`CLK_DELAY_IDX]         = map_data_q[`CLK_DELAY_IDX];
+	    cpu_data_r[`CLK_CPUCLK_DIV_IDX]    = map_data_q[`CLK_CPUCLK_DIV_IDX];
           end
           else //must be RAM access
             cpu_data_r = {8{1'bz}};
@@ -411,14 +419,14 @@ module level1b_mk2_m (
     // Synchronous reset for this register
     if ( !resetb )
       begin
-	map_data_q[`MAP_HSCLK_EN_IDX]       <= 1'b0;
-	map_data_q[`SHADOW_MEM_IDX]         <= 1'b0;
-	map_data_q[`MAP_ROM_IDX]            <= 1'b0;
+	map_data_q[`MAP_HSCLK_EN_IDX]    <= 1'b0;
+	map_data_q[`SHADOW_MEM_IDX]      <= 1'b0;
+	map_data_q[`MAP_ROM_IDX]         <= 1'b0;
         // Use DIP/jumpers to select divider ratio on startup
-	map_data_q[`HOST_TYPE_1_IDX]           <= 1'b0;
-	map_data_q[`HOST_TYPE_0_IDX]           <= 1'b0;
-	map_data_q[`CLK_CPUCLK_DIV_IDX_HI]  <= j[1];
-	map_data_q[`CLK_CPUCLK_DIV_IDX_LO]  <= j[0];
+	map_data_q[`HOST_TYPE_1_IDX]     <= 1'b0;
+	map_data_q[`HOST_TYPE_0_IDX]     <= 1'b0;
+	map_data_q[`CLK_DELAY_IDX]       <= j[1];
+	map_data_q[`CLK_CPUCLK_DIV_IDX]  <= j[0];
         bbc_pagereg_q <= {`BBC_PAGEREG_SZ{1'b0}};
 `ifdef MASTER_RAM_8000
         ram_at_8000 <= 1'b0;
@@ -430,13 +438,13 @@ module level1b_mk2_m (
     else
       begin
         if (cpld_reg_sel_w[`CPLD_REG_SEL_MAP_CC_IDX] & !cpu_rnw) begin
-	  map_data_q[`MAP_HSCLK_EN_IDX]      <= cpu_data[`MAP_HSCLK_EN_IDX] ;
-	  map_data_q[`SHADOW_MEM_IDX]        <= cpu_data[`SHADOW_MEM_IDX];
-          map_data_q[`HOST_TYPE_1_IDX]          <= cpu_data[`HOST_TYPE_1_IDX];
-          map_data_q[`HOST_TYPE_0_IDX]          <= cpu_data[`HOST_TYPE_0_IDX];
-	  map_data_q[`MAP_ROM_IDX]           <= cpu_data[`MAP_ROM_IDX];
-	  map_data_q[`CLK_CPUCLK_DIV_IDX_HI] <= cpu_data[`CLK_CPUCLK_DIV_IDX_HI];
-	  map_data_q[`CLK_CPUCLK_DIV_IDX_LO] <= cpu_data[`CLK_CPUCLK_DIV_IDX_LO];
+	  map_data_q[`MAP_HSCLK_EN_IDX]   <= cpu_data[`MAP_HSCLK_EN_IDX] ;
+	  map_data_q[`SHADOW_MEM_IDX]     <= cpu_data[`SHADOW_MEM_IDX];
+          map_data_q[`HOST_TYPE_1_IDX]    <= cpu_data[`HOST_TYPE_1_IDX];
+          map_data_q[`HOST_TYPE_0_IDX]    <= cpu_data[`HOST_TYPE_0_IDX];
+	  map_data_q[`MAP_ROM_IDX]        <= cpu_data[`MAP_ROM_IDX];
+	  map_data_q[`CLK_DELAY_IDX]      <= cpu_data[`CLK_DELAY_IDX];
+	  map_data_q[`CLK_CPUCLK_DIV_IDX] <= cpu_data[`CLK_CPUCLK_DIV_IDX];
         end // if (cpld_reg_sel_w[`CPLD_REG_SEL_MAP_CC_IDX] & !cpu_rnw)
         else if (cpld_reg_sel_w[`CPLD_REG_SEL_BBC_PAGEREG_IDX] & !cpu_rnw ) begin
           bbc_pagereg_q <= cpu_data;

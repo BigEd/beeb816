@@ -1,6 +1,6 @@
 // Switch stops the clock in the PHI2 state
 
-// Size of clock delay pipe - needs to be 2 for the Master but 3 for BBC /Elk ? TBC
+// Size of clock delay pipe - needs to be 0 for the Master but 2 or 3 for BBC /Elk ? TBC
 `define CLKDEL_PIPE_SZ 3
 
 module clkctrl_phi2(
@@ -8,14 +8,15 @@ module clkctrl_phi2(
                input       lsclk_in,
                input       rst_b,
                input       hsclk_sel,
-               input [1:0] cpuclk_div_sel,
+               input       delay_sel,
+               input       cpuclk_div_sel,
                output      hsclk_selected,
                output      lsclk_selected,
                output      clkout
                );
 
-  reg [2:0]                clkdiv_q;
-  reg [2:0]                clkdiv_d;
+  reg [1:0]                clkdiv_q;
+  reg [1:0]                clkdiv_d;
   reg                      hs_enable_q, ls_enable_q;
   reg                      selected_ls_q;
   reg                      selected_hs_q;
@@ -23,13 +24,16 @@ module clkctrl_phi2(
   reg                      retimed_hs_enable_q;
   reg [`CLKDEL_PIPE_SZ-1:0] del_q;
 
+
   // Force Keep clock nets to prevent ISE merging divider logic into other equations and
   // causing timing issues
   (* KEEP="TRUE" *) wire  cpuclk_w;
   (* KEEP="TRUE" *) wire  lsclk_del_w;
+  // Faster XTAL speeds need a longer delay line
+  assign lsclk_del_w = (delay_sel) ? del_q[0] : del_q[1];
   BUF cpuclkbuf  ( .O(cpuclk_w), .I(clkdiv_q[0]));
-  BUF lsclkbuf   ( .O(lsclk_del_w), .I(del_q[0]));
   assign clkout = (cpuclk_w & hs_enable_q) | (lsclk_del_w & ls_enable_q);
+
   assign lsclk_selected = selected_ls_q;
   assign hsclk_selected = selected_hs_q;
 
@@ -81,9 +85,8 @@ module clkctrl_phi2(
 
   // Clock Dividers
   always @ ( * ) begin
-    clkdiv_d[2] = !clkdiv_q[0] ;
-    clkdiv_d[1] = (cpuclk_div_sel == 2'b01) ? !clkdiv_q[0] : clkdiv_q[2];
-    clkdiv_d[0] = (cpuclk_div_sel == 2'b00) ? !clkdiv_q[0] : clkdiv_q[1];
+    clkdiv_d[1] = !clkdiv_q[0];
+    clkdiv_d[0] = (!cpuclk_div_sel) ? !clkdiv_q[0] : clkdiv_q[1];
   end
 
   always @ ( posedge hsclk_in or negedge rst_b)
