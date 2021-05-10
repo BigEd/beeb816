@@ -71,7 +71,7 @@ module clkctrl_phi2(
   // Simulate a latch transparent on low cpuclk_w by oversampling
   // with hsclk_in - allowing max time for hsclk_sel to stabilize
   // before being used to gate the clock.
-  always @ ( posedge hsclk_in or negedge rst_b )
+  always @ ( negedge hsclk_in or negedge rst_b )
     if ( !rst_b )
       hs_enable_q <= 1'b0;
     else if ( !cpuclk_w )
