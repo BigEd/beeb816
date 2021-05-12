@@ -6,6 +6,14 @@
 // Select this to use the /2 and /3 rather than /2 and /4
 //`define USE_DIVIDER_234
 
+// Use this to get a latch on the HS clock enable rather than a FF
+//`define USE_LATCH_ENABLE 1
+
+`ifdef USE_DIVIDER_234
+  `define USE_LATCH_ENABLE 1
+`endif
+
+
 module clkctrl_phi2(
                input       hsclk_in,
                input       lsclk_in,
@@ -34,7 +42,9 @@ module clkctrl_phi2(
   assign clkout = (cpuclk_w & hs_enable_q) | (lsclk_del_w & ls_enable_q);
   assign lsclk_selected = selected_ls_q;
   assign hsclk_selected = selected_hs_q;
-  
+
+
+
 `ifdef USE_DIVIDER_234
   clkdiv234 divider_u ( .clkin(hsclk_in),
                         .rstb(rst_b),
@@ -47,7 +57,7 @@ module clkctrl_phi2(
                        .rstb(rst_b),
                        .div4not2(cpuclk_div_sel),
                        .clkout(cpuclk_w));
-`endif  
+`endif
 
   // Delay the host clock to match delays on the motherboard
   always @ (posedge hsclk_in) begin
@@ -68,6 +78,13 @@ module clkctrl_phi2(
     else
       selected_hs_q <= hs_enable_q;
 
+`ifdef USE_LATCH_ENABLE
+  always @ ( cpuclk_w or rst_b )
+    if ( !rst_b )
+      hs_enable_q <= 1'b0;
+    else if ( !cpuclk_w )
+      hs_enable_q <= hsclk_sel & !retimed_ls_enable_q;
+`else
   // Simulate a latch transparent on low cpuclk_w by oversampling
   // with hsclk_in - allowing max time for hsclk_sel to stabilize
   // before being used to gate the clock.
@@ -76,6 +93,7 @@ module clkctrl_phi2(
       hs_enable_q <= 1'b0;
     else if ( !cpuclk_w )
       hs_enable_q <= hsclk_sel & !retimed_ls_enable_q;
+`endif // !`ifdef USE_LATCH_ENABLE
 
   always @ ( negedge lsclk_del_w or negedge rst_b )
     if ( ! rst_b )
