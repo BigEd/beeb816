@@ -13,15 +13,6 @@
   `define USE_LATCH_ENABLE 1
 `endif
 
-
-// Use this to get a latch on the HS clock enable rather than a FF
-//`define USE_LATCH_ENABLE 1
-
-`ifdef USE_DIVIDER_234
-  `define USE_LATCH_ENABLE 1
-`endif
-
-
 module clkctrl_phi2(
                input       hsclk_in,
                input       lsclk_in,
