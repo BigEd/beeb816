@@ -3,11 +3,13 @@
 // Size of clock delay pipe - needs to be 0 for the Master but 2 or 3 for BBC /Elk depending on xtal
 `define CLKDEL_PIPE_SZ 3
 
-// Select this to use the /2 and /3 rather than /2 and /4
+// Select this to use a simple /2, /4 ripple counter divider
+`define RIPPLE_DIVIDER
+// Select this to use the /2 and /3 rather than /2 and /4 in the synchronous divider module
 //`define USE_DIVIDER_23
 
 // Use this to get a latch on the HS clock enable rather than a FF
-`define USE_LATCH_ENABLE 1
+//`define USE_LATCH_ENABLE 1
 `ifdef USE_DIVIDER_23
   `define USE_LATCH_ENABLE 1
 `endif
@@ -41,6 +43,15 @@ module clkctrl_phi2(
   assign lsclk_selected = selected_ls_q;
   assign hsclk_selected = selected_hs_q;
 
+`ifdef RIPPLE_DIVIDER
+  reg                       ripple_div2_q;
+  reg                       ripple_div4_q;
+  always @ ( posedge hsclk_in )
+    ripple_div2_q <= !ripple_div2_q;
+  always @ ( posedge ripple_div2_q )
+    ripple_div4_q <= !ripple_div4_q;
+  assign cpuclk_w = ( cpuclk_div_sel) ? ripple_div4_q : ripple_div2_q;
+`else
   clkdiv234 divider_u ( .clkin(hsclk_in),
                         .rstb(rst_b),
 `ifdef USE_DIVIDER_23
@@ -52,6 +63,7 @@ module clkctrl_phi2(
 `endif
                         .div2(cpuclk_div_sel==1'b0),
                         .clkout(cpuclk_w));
+`endif // !`ifdef RIPPLE_DIVIDER
 
   // Delay the host clock to match delays on the motherboard
   always @ (posedge hsclk_in) begin
@@ -110,6 +122,5 @@ module clkctrl_phi2(
       retimed_ls_enable_q <= 2'b11;
     else
       retimed_ls_enable_q <= {selected_ls_q, retimed_ls_enable_q[1]} ;
-
 
 endmodule
