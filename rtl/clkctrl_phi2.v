@@ -7,8 +7,7 @@
 //`define USE_DIVIDER_23
 
 // Use this to get a latch on the HS clock enable rather than a FF
-//`define USE_LATCH_ENABLE 1
-
+`define USE_LATCH_ENABLE 1
 `ifdef USE_DIVIDER_23
   `define USE_LATCH_ENABLE 1
 `endif
@@ -28,7 +27,7 @@ module clkctrl_phi2(
   reg                      hs_enable_q, ls_enable_q;
   reg                      selected_ls_q;
   reg                      selected_hs_q;
-  reg                      retimed_ls_enable_q;
+  reg [1:0]                retimed_ls_enable_q;
   reg                      retimed_hs_enable_q;
   reg [`CLKDEL_PIPE_SZ-1:0] del_q;
 
@@ -74,20 +73,22 @@ module clkctrl_phi2(
       selected_hs_q <= hs_enable_q;
 
 `ifdef USE_LATCH_ENABLE
+  // Use a latch on the HS enable to allow maximum time for the
+  // enable to stabilize before being used to gate the clock
   always @ ( cpuclk_w or rst_b )
     if ( !rst_b )
       hs_enable_q <= 1'b0;
     else if ( !cpuclk_w )
-      hs_enable_q <= hsclk_sel & !retimed_ls_enable_q;
+      hs_enable_q <= hsclk_sel & !retimed_ls_enable_q[0];
 `else
   // Simulate a latch transparent on low cpuclk_w by oversampling
-  // with hsclk_in - allowing max time for hsclk_sel to stabilize
-  // before being used to gate the clock.
+  // with hsclk_in - allows 1/2 hsclk cycle less time then using
+  // an actual latch
   always @ ( negedge hsclk_in or negedge rst_b )
     if ( !rst_b )
       hs_enable_q <= 1'b0;
     else if ( !cpuclk_w )
-      hs_enable_q <= hsclk_sel & !retimed_ls_enable_q;
+      hs_enable_q <= hsclk_sel & !retimed_ls_enable_q[0];
 `endif // !`ifdef USE_LATCH_ENABLE
 
   always @ ( negedge lsclk_del_w or negedge rst_b )
@@ -102,11 +103,13 @@ module clkctrl_phi2(
     else
       retimed_hs_enable_q <= selected_hs_q;
 
+  // Use two FFs here for safety because reset might be deasserted at the same
+  // time as a cpuclk_w negedge (both of which are on a hsclk posedge)
   always @ ( negedge cpuclk_w or posedge ls_enable_q )
     if (ls_enable_q)
-      retimed_ls_enable_q <= 1'b1;
+      retimed_ls_enable_q <= 2'b11;
     else
-      retimed_ls_enable_q <= selected_ls_q;
+      retimed_ls_enable_q <= {selected_ls_q, retimed_ls_enable_q[1]} ;
 
 
 endmodule
