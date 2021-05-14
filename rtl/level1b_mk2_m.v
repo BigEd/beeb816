@@ -56,7 +56,7 @@
   `define ELK_PAGED_ROM_SEL 16'hFE05
   `define PAGED_ROM_SEL 16'hFE30
   `define BPLUS_SHADOW_RAM_SEL 16'hFE34
-  `define DECODED_SHADOW_REG  ((`L1_BPLUS_MODE) ? (cpu_adr==`BPLUS_SHADOW_RAM_SEL) : 1'b0 )
+  `define DECODED_SHADOW_REG  (((`L1_BPLUS_MODE) || (`L1_MASTER_MODE)) ? (cpu_adr==`BPLUS_SHADOW_RAM_SEL) : 1'b0 )
   `define DECODED_ROM_REG     ((`L1_ELK_MODE)? (cpu_adr==`ELK_PAGED_ROM_SEL) : (cpu_adr==`PAGED_ROM_SEL))
   // Flag FE4x (VIA) accesses and also all &FC, &FD expansion pages
   `define DECODED_FE4X        ((cpu_adr[15:4]==12'hFE4) || (cpu_adr[15:9]==7'b1111_110))
@@ -453,9 +453,11 @@ module level1b_mk2_m (
 `endif
         end
         else if (cpld_reg_sel_w[`CPLD_REG_SEL_BBC_SHADOW_IDX] & !cpu_rnw ) begin
-          map_data_q[`SHADOW_MEM_IDX] <= cpu_data[`SHADOW_MEM_IDX];
+          if `L1_BPLUS_MODE
+            map_data_q[`SHADOW_MEM_IDX] <= cpu_data[`SHADOW_MEM_IDX];
 `ifdef MASTER_RAM_C000
-          ram_at_c000 <= cpu_data[3];
+          if `L1_MASTER_MODE
+            ram_at_c000 <= cpu_data[3];
 `endif
         end
       end // else: !if( !resetb )
