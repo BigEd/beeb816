@@ -223,7 +223,7 @@ module level1b_mk2_m (
 
   assign cpu_phi2_w = !cpu_phi1_w ;
   assign cpu_phi2 =  cpu_phi2_w ;
-  assign bbc_sync = (cpu_vpa & cpu_vda) & !dummy_access_w;
+  assign bbc_sync = (cpu_vpa & cpu_vda) | dummy_access_w;
 
 `ifdef MARK2B
   // CPLD must do 5V/3V3 shifting on all control signals from host
