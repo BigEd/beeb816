@@ -26,8 +26,6 @@
 // `define MASTER_RAM_8000 1
 // Define this for Master RAM overlay at C000
 // `define MASTER_RAM_C000 1
-// Define this to use fast reads/slow writes to Shadow as with the VRAM to simplify decoding
-//`define CACHED_SHADOW_RAM 1
 // Trial code to make VRAM area larger than default of 20K to simplify decoding(can be used with above)
 `define VRAM_AREA_20K_N_31K    (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | ((map_data_q[`MAP_VRAM_SZ_IDX])? (cpu_adr[13]&cpu_adr[12]) : (cpu_adr[13]| cpu_adr[12] | cpu_adr[11] | cpu_adr[10]))))
 `define VRAM_AREA_31K          (!cpu_data[7] & !cpu_adr[15]  &(cpu_adr[14] | (cpu_adr[13]| cpu_adr[12] | cpu_adr[11] | cpu_adr[10])))
@@ -135,7 +133,7 @@ module level1b_mk2_m (
   reg [7:0]                            cpu_hiaddr_lat_q;
   reg [7:0]                            cpu_data_r;
   reg                                  mos_vdu_sync_q;
-  reg                                  himem_vram_wr_lat_q;
+  reg                                  vram_access_lat_q;
   reg                                  rom_wr_protect_lat_q;
   reg [7:0]                            bbc_data_lat_q;
   // This is the internal register controlling which features like high speed clocks etc are enabled
@@ -163,7 +161,7 @@ module level1b_mk2_m (
 `endif
   reg                                  rdy_q;
   wire                                 io_access_pipe_d;
-  wire                                 himem_vram_wr_d;
+  reg                                  vram_access_d;
 
 `ifdef FORCE_KEEP_CLOCK
   (* KEEP="TRUE" *) wire               cpu_phi1_w;
@@ -293,9 +291,6 @@ module level1b_mk2_m (
   assign bbc_data = ( !bbc_rnw & bbc_phi2) ? cpu_data : { 8{1'bz}};
   assign cpu_data = cpu_data_r;
 
-  // Identify Video RAM so that in non shadow mode VRAM writes can be slowed down
-  assign himem_vram_wr_d = `VRAM_AREA ;
-
   // Check for write accesses to some of IO space (FE4x) in case we need to delay switching back to HS clock
   // so that min pulse widths to sound chip/reading IO are respected
   assign io_access_pipe_d = !cpu_hiaddr_lat_q[7] & `DECODED_FE4X & cpu_vda ;
@@ -305,12 +300,8 @@ module level1b_mk2_m (
   // * on valid imm/data fetches from himem _if_ hs clock is already selected, or
   // * on invalid bus cycles if hs clock is already selected
   //
-  // Option cached_shadow_ram can simplify the logic at the cost of making shadow and VRAM accesses both fast read/slow write
-`ifdef CACHED_SHADOW_RAM
-  assign himem_w =  cpu_hiaddr_lat_q[7] & (!himem_vram_wr_lat_q | cpu_rnw );
-`else
-  assign himem_w =  cpu_hiaddr_lat_q[7] & (!himem_vram_wr_lat_q | cpu_rnw | map_data_q[`SHADOW_MEM_IDX]);
-`endif
+  // NB cpu_hiaddr_lat_q[7] only set in shadow mode if not a video access
+  assign himem_w =  cpu_hiaddr_lat_q[7] & (!vram_access_lat_q | cpu_rnw | map_data_q[`SHADOW_MEM_IDX]);
 
   assign hisync_w = (cpu_vpa&cpu_vda) & cpu_hiaddr_lat_q[7];
   assign sel_hs_w = (( hisync_w & !io_access_pipe_q[0] ) |
@@ -318,7 +309,7 @@ module level1b_mk2_m (
                      (!cpu_vpa & !cpu_vda & hs_selected_w)
                      ) ;
 
-  assign dummy_access_w =  himem_w | !ls_selected_w ;
+  assign dummy_access_w =  himem_w | !ls_selected_w;
 
   // ROM remapping
   always @ ( * ) begin
@@ -342,7 +333,7 @@ module level1b_mk2_m (
          end
 `else
          remapped_romCF_access_r = (bbc_pagereg_q[3:2] == 2'b11) ;
-         remapped_romAB_access_r = (bbc_pagereg_q[3:1] == 3'b101) ;         
+         remapped_romAB_access_r = (bbc_pagereg_q[3:1] == 3'b101) ;
          remapped_rom47_access_r = (bbc_pagereg_q[3:2] == 2'b01) ;
 `endif
        end
@@ -360,8 +351,8 @@ module level1b_mk2_m (
   end
 
   always @ ( * ) begin
-      // Remap all of memory except VRAM area when in shadow mode and when a VDU access is in progress
-      remapped_ram_access_r = !cpu_data[7] & !cpu_adr[15] & !(`VRAM_AREA  & mos_vdu_sync_q) ;
+    // Remap all of memory except VRAM area when in shadow mode and when a VDU access is in progress
+    remapped_ram_access_r = !cpu_data[7] & !cpu_adr[15] & !( mos_vdu_sync_q & `VRAM_AREA);
   end
 
   always @ ( * ) begin
@@ -369,27 +360,40 @@ module level1b_mk2_m (
     cpu_a15_lat_d = cpu_adr[15];
     cpu_a14_lat_d = cpu_adr[14];
     cpu_hiaddr_lat_d = cpu_data;
+    vram_access_d = 1'b0;
 
     // Native mode interrupts go to bank 0xFF (with other native 816 code)
     if ( native_mode_int_w )
       cpu_hiaddr_lat_d = 8'hFF;
-    else begin
-      // All remapped RAM/Mos accesses to 8'b1110x110
-      if ( remapped_ram_access_r | remapped_mos_access_r) begin
+    else if ( remapped_mos_access_r ) begin
+      cpu_hiaddr_lat_d = 8'hFF;
+      cpu_a14_lat_d = 1'b0;
+    end
+    else if ( remapped_ram_access_r ) begin
+      if ( map_data_q[`SHADOW_MEM_IDX] ) begin
+//         if ( `VRAM_AREA & !mos_vdu_sync_q ) // Accesses to VRAM area which aren't from VDU code go to shadow memory &FD
+//          cpu_hiaddr_lat_d = 8'hFD;
+//        else begin
+          cpu_hiaddr_lat_d = 8'hFF;          // All other accesses to bank &FF
+          if ( `VRAM_AREA )
+            vram_access_d = 1'b1;
+//        end
+      end
+      else begin                             // Shadow mode not enabled - all accesses to high bank &FF
         cpu_hiaddr_lat_d = 8'hFF;
-        if ( remapped_mos_access_r)
-          cpu_a14_lat_d = 1'b0;
+        if ( `VRAM_AREA )
+          vram_access_d = 1'b1;
       end
-      if (remapped_rom47_access_r | remapped_romCF_access_r | remapped_romAB_access_r) begin
-        if ( remapped_rom47_access_r )
-          cpu_hiaddr_lat_d = 8'hFC;        
-        else if ( remapped_romCF_access_r ) 
-          cpu_hiaddr_lat_d = 8'hFD;        
-        else if ( remapped_romAB_access_r) 
-          cpu_hiaddr_lat_d = 8'hFE;
-        cpu_a15_lat_d = bbc_pagereg_q[1];
-        cpu_a14_lat_d = bbc_pagereg_q[0];
-      end
+    end
+    else if (remapped_rom47_access_r | remapped_romCF_access_r | remapped_romAB_access_r) begin
+      if ( remapped_rom47_access_r )
+        cpu_hiaddr_lat_d = 8'hFC;
+      else if ( remapped_romAB_access_r )
+        cpu_hiaddr_lat_d = 8'hFD;
+      else if ( remapped_romCF_access_r)
+        cpu_hiaddr_lat_d = 8'hFE;
+      cpu_a15_lat_d = bbc_pagereg_q[1];
+      cpu_a14_lat_d = bbc_pagereg_q[0];
     end
   end
 
@@ -504,15 +508,10 @@ module level1b_mk2_m (
   //
   always @ ( negedge cpu_phi2_w )
     if ( cpu_vpa & cpu_vda ) begin
-      if ( map_data_q[`SHADOW_MEM_IDX]) begin
-        if ( map_data_q[`MAP_ROM_IDX])
-          mos_vdu_sync_q <= ({cpu_hiaddr_lat_q[7],cpu_hiaddr_lat_q[3:0], cpu_adr[15:13]}==8'b1_1111_110);
-        else
-          mos_vdu_sync_q <= ({cpu_hiaddr_lat_q[7],cpu_adr[15:13]}==4'b0_110);
-      end
+      if ( map_data_q[`MAP_ROM_IDX])
+        mos_vdu_sync_q <= map_data_q[`SHADOW_MEM_IDX] & ({cpu_hiaddr_lat_q[7],cpu_hiaddr_lat_q[3:0], cpu_adr[15:13]}==8'b1_1111_110);
       else
-        // mos_vdu_sync_q always zerod in non-shadow mode
-        mos_vdu_sync_q <= 1'b0;
+        mos_vdu_sync_q <= map_data_q[`SHADOW_MEM_IDX] & ({cpu_hiaddr_lat_q[7],cpu_adr[15:13]}==4'b0_110);
     end // if ( cpu_vpa & cpu_vda )
 
   // Latches for the high address bits open during PHI1
@@ -522,7 +521,7 @@ module level1b_mk2_m (
         cpu_hiaddr_lat_q <= cpu_hiaddr_lat_d ;
         cpu_a15_lat_q <= cpu_a15_lat_d;
         cpu_a14_lat_q <= cpu_a14_lat_d;
-        himem_vram_wr_lat_q <= himem_vram_wr_d;
+        vram_access_lat_q <= vram_access_d;
         rom_wr_protect_lat_q <= remapped_mos_access_r| remapped_romCF_access_r | remapped_romAB_access_r;
       end
 
