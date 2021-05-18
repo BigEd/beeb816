@@ -145,6 +145,7 @@ module level1b_mk2_m (
   reg [`BBC_PAGEREG_SZ-1:0]            bbc_pagereg_q;
   reg [`MAP_CC_DATA_SZ-1:0]            map_data_q;
   reg                                  remapped_rom47_access_r ;
+  reg                                  remapped_romAB_access_r ;
   reg                                  remapped_romCF_access_r ;
   reg                                  remapped_mos_access_r ;
   reg                                  remapped_ram_access_r ;
@@ -324,20 +325,24 @@ module level1b_mk2_m (
     // Split ROM and MOS identification to allow them to go to different banks later
     remapped_mos_access_r = 0;
     remapped_rom47_access_r = 0;
+    remapped_romAB_access_r = 0;
     remapped_romCF_access_r = 0;
     if (!cpu_data[7] & cpu_adr[15] & (cpu_vpa|cpu_vda) & map_data_q[`MAP_ROM_IDX]) begin
        if (!cpu_adr[14]) begin
 `ifdef MASTER_RAM_8000
          if ( `L1_MASTER_MODE ) begin
            remapped_romCF_access_r = (bbc_pagereg_q[3:2] == 2'b11) & (cpu_adr[12] | cpu_adr[13] | !ram_at_8000);
+           remapped_romAB_access_r = (bbc_pagereg_q[3:1] == 3'b101) & (cpu_adr[12] | cpu_adr[13] | !ram_at_8000);
            remapped_rom47_access_r = (bbc_pagereg_q[3:2] == 2'b01) & (cpu_adr[12] | cpu_adr[13] | !ram_at_8000);
          end
          else begin
            remapped_romCF_access_r = (bbc_pagereg_q[3:2] == 2'b11) ;
+           remapped_romAB_access_r = (bbc_pagereg_q[3:1] == 3'b101) ;
            remapped_rom47_access_r = (bbc_pagereg_q[3:2] == 2'b01) ;
          end
 `else
          remapped_romCF_access_r = (bbc_pagereg_q[3:2] == 2'b11) ;
+         remapped_romAB_access_r = (bbc_pagereg_q[3:1] == 3'b101) ;         
          remapped_rom47_access_r = (bbc_pagereg_q[3:2] == 2'b01) ;
 `endif
        end
@@ -375,10 +380,13 @@ module level1b_mk2_m (
         if ( remapped_mos_access_r)
           cpu_a14_lat_d = 1'b0;
       end
-      // All remapped ROM slots 4-7 accesses to 8'b1110x100
-      // All remapped ROM slots C-F accesses to 8'b1110x101
-      if (remapped_rom47_access_r | remapped_romCF_access_r) begin
-        cpu_hiaddr_lat_d = (remapped_rom47_access_r) ? 8'hFD: 8'hFE;
+      if (remapped_rom47_access_r | remapped_romCF_access_r | remapped_romAB_access_r) begin
+        if ( remapped_rom47_access_r )
+          cpu_hiaddr_lat_d = 8'hFC;        
+        else if ( remapped_romCF_access_r ) 
+          cpu_hiaddr_lat_d = 8'hFD;        
+        else if ( remapped_romAB_access_r) 
+          cpu_hiaddr_lat_d = 8'hFE;
         cpu_a15_lat_d = bbc_pagereg_q[1];
         cpu_a14_lat_d = bbc_pagereg_q[0];
       end
@@ -515,7 +523,7 @@ module level1b_mk2_m (
         cpu_a15_lat_q <= cpu_a15_lat_d;
         cpu_a14_lat_q <= cpu_a14_lat_d;
         himem_vram_wr_lat_q <= himem_vram_wr_d;
-        rom_wr_protect_lat_q <= remapped_mos_access_r|remapped_romCF_access_r ;
+        rom_wr_protect_lat_q <= remapped_mos_access_r| remapped_romCF_access_r | remapped_romAB_access_r;
       end
 
   // Latches for the BBC data open during PHI2 to be stable beyond cycle end
