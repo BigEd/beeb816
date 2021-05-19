@@ -27,6 +27,8 @@
 // Define this for Master RAM overlay at C000
 // `define MASTER_RAM_C000 1
 // Trial code to make VRAM area larger than default of 20K to simplify decoding(can be used with above)
+`define VRAM_AREA_20K          (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | (cpu_adr[13]&cpu_adr[12])))
+`define VRAM_AREA_30K          (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | cpu_adr[13] | cpu_adr[12] | cpu_adr[11] ))
 `define VRAM_AREA_20K_N_31K    (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | ((map_data_q[`MAP_VRAM_SZ_IDX])? (cpu_adr[13]&cpu_adr[12]) : (cpu_adr[13]| cpu_adr[12] | cpu_adr[11] | cpu_adr[10]))))
 `define VRAM_AREA_31K          (!cpu_data[7] & !cpu_adr[15]  &(cpu_adr[14] | (cpu_adr[13]| cpu_adr[12] | cpu_adr[11] | cpu_adr[10])))
 `define VRAM_AREA_32K          (!cpu_data[7] & !cpu_adr[15] )
@@ -301,7 +303,8 @@ module level1b_mk2_m (
   // * on invalid bus cycles if hs clock is already selected
   //
   // NB cpu_hiaddr_lat_q[7] only set in shadow mode if not a video access
-  assign himem_w =  cpu_hiaddr_lat_q[7] & (!vram_access_lat_q | cpu_rnw | map_data_q[`SHADOW_MEM_IDX]);
+//  assign himem_w =  cpu_hiaddr_lat_q[7] & (!vram_access_lat_q | cpu_rnw | map_data_q[`SHADOW_MEM_IDX]);
+  assign himem_w =  cpu_hiaddr_lat_q[7] & (!vram_access_lat_q | cpu_rnw );  
 
   assign hisync_w = (cpu_vpa&cpu_vda) & cpu_hiaddr_lat_q[7];
   assign sel_hs_w = (( hisync_w & !io_access_pipe_q[0] ) |
@@ -351,8 +354,8 @@ module level1b_mk2_m (
   end
 
   always @ ( * ) begin
-    // Remap all of memory except VRAM area when in shadow mode and when a VDU access is in progress
-    remapped_ram_access_r = !cpu_data[7] & !cpu_adr[15] & !( mos_vdu_sync_q & `VRAM_AREA);
+    // Remap all of RAM area now and deal with video accesses separately
+    remapped_ram_access_r = !cpu_data[7] & !cpu_adr[15] ; 
   end
 
   always @ ( * ) begin
@@ -371,18 +374,20 @@ module level1b_mk2_m (
     end
     else if ( remapped_ram_access_r ) begin
       if ( map_data_q[`SHADOW_MEM_IDX] ) begin
-//         if ( `VRAM_AREA & !mos_vdu_sync_q ) // Accesses to VRAM area which aren't from VDU code go to shadow memory &FD
-//          cpu_hiaddr_lat_d = 8'hFD;
-//        else begin
-          cpu_hiaddr_lat_d = 8'hFF;          // All other accesses to bank &FF
-          if ( `VRAM_AREA )
-            vram_access_d = 1'b1;
-//        end
-      end
-      else begin                             // Shadow mode not enabled - all accesses to high bank &FF
-        cpu_hiaddr_lat_d = 8'hFF;
-        if ( `VRAM_AREA )
+        // Shadow mode enabled - video accesses to bank &FD, other accesses to bank &FF
+        if ( `VRAM_AREA & mos_vdu_sync_q ) begin
+          cpu_hiaddr_lat_d = 8'hFD; 
           vram_access_d = 1'b1;
+        end
+        else 
+          cpu_hiaddr_lat_d = 8'hFF;
+      end
+      else begin
+        // Shadow mode disabled - all remapped memory accesses to bank &FF
+        cpu_hiaddr_lat_d = 8'hFF;        
+        if ( `VRAM_AREA ) begin
+          vram_access_d = 1'b1;
+        end
       end
     end
     else if (remapped_rom47_access_r | remapped_romCF_access_r | remapped_romAB_access_r) begin
@@ -432,13 +437,13 @@ module level1b_mk2_m (
     if ( !resetb )
       begin
 	map_data_q[`MAP_HSCLK_EN_IDX]    <= 1'b0;
-	map_data_q[`SHADOW_MEM_IDX]      <= 1'b0;
 	map_data_q[`MAP_ROM_IDX]         <= 1'b0;
         // Use DIP/jumpers to select divider ratio on startup
 	map_data_q[`HOST_TYPE_1_IDX]     <= 1'b0;
 	map_data_q[`HOST_TYPE_0_IDX]     <= 1'b0;
-	map_data_q[`CLK_DELAY_IDX]       <= j[1];
 	map_data_q[`CLK_CPUCLK_DIV_IDX]  <= j[0];
+	map_data_q[`CLK_DELAY_IDX]       <= j[1];
+	map_data_q[`SHADOW_MEM_IDX]      <= 1'b0;
         bbc_pagereg_q <= {`BBC_PAGEREG_SZ{1'b0}};
 `ifdef MASTER_RAM_8000
         ram_at_8000 <= 1'b0;
