@@ -15,7 +15,7 @@
 `define FORCE_KEEP_CLOCK 1
 
 // Define to drive clocks to test points tp[1:0]
-//`define OBSERVE_CLOCKS 1
+`define OBSERVE_CLOCKS 1
 
 // Set one of these to falling edge of RAMOEB by one buffer when running with fast SRAM
 //`define DELAY_RAMOEB_BY_1
@@ -181,9 +181,10 @@ module level1b_mk2_m (
   wire                                 hisync_w;
   wire [ `CPLD_REG_SEL_SZ-1:0]         cpld_reg_sel_w;
   wire                                 ckdel_w;
+  wire                                 fast_clk_w;
 
 `ifdef OBSERVE_CLOCKS
-  assign tp = { bbc_phi2, cpu_phi2 };
+  assign tp = { bbc_phi2, fast_clk_w} ; // or cpu_phi2  for switched clock
 `endif
 
   // Deglitch PHI0 input for feeding to clock switch only (mainly helps Elk, but
@@ -218,9 +219,9 @@ module level1b_mk2_m (
                     .cpuclk_div_sel(map_data_q[`CLK_CPUCLK_DIV_IDX]),
                     .hsclk_selected(hs_selected_w),
                     .lsclk_selected(ls_selected_w),
-                    .clkout(cpu_phi1_w)
+                    .clkout(cpu_phi1_w),
+                    .fast_clkout(fast_clk_w)
                     );
-
 
   assign cpu_phi2_w = !cpu_phi1_w ;
   assign cpu_phi2 =  cpu_phi2_w ;
@@ -301,10 +302,7 @@ module level1b_mk2_m (
   // * on valid instruction fetches from himem, or
   // * on valid imm/data fetches from himem _if_ hs clock is already selected, or
   // * on invalid bus cycles if hs clock is already selected
-  //
-  // NB cpu_hiaddr_lat_q[7] only set in shadow mode if not a video access
-//  assign himem_w =  cpu_hiaddr_lat_q[7] & (!vram_access_lat_q | cpu_rnw | map_data_q[`SHADOW_MEM_IDX]);
-  assign himem_w =  cpu_hiaddr_lat_q[7] & (!vram_access_lat_q | cpu_rnw );  
+  assign himem_w =  cpu_hiaddr_lat_q[7] & (!vram_access_lat_q | cpu_rnw );
 
   assign hisync_w = (cpu_vpa&cpu_vda) & cpu_hiaddr_lat_q[7];
   assign sel_hs_w = (( hisync_w & !io_access_pipe_q[0] ) |
@@ -355,7 +353,7 @@ module level1b_mk2_m (
 
   always @ ( * ) begin
     // Remap all of RAM area now and deal with video accesses separately
-    remapped_ram_access_r = !cpu_data[7] & !cpu_adr[15] ; 
+    remapped_ram_access_r = !cpu_data[7] & !cpu_adr[15] ;
   end
 
   always @ ( * ) begin
@@ -376,18 +374,16 @@ module level1b_mk2_m (
       if ( map_data_q[`SHADOW_MEM_IDX] ) begin
         // Shadow mode enabled - video accesses to bank &FD, other accesses to bank &FF
         if ( `VRAM_AREA & mos_vdu_sync_q ) begin
-          cpu_hiaddr_lat_d = 8'hFD; 
+          cpu_hiaddr_lat_d = 8'hFD;
           vram_access_d = 1'b1;
         end
-        else 
+        else
           cpu_hiaddr_lat_d = 8'hFF;
       end
       else begin
         // Shadow mode disabled - all remapped memory accesses to bank &FF
-        cpu_hiaddr_lat_d = 8'hFF;        
-        if ( `VRAM_AREA ) begin
-          vram_access_d = 1'b1;
-        end
+        cpu_hiaddr_lat_d = 8'hFF;
+        vram_access_d = (`VRAM_AREA) ;
       end
     end
     else if (remapped_rom47_access_r | remapped_romCF_access_r | remapped_romAB_access_r) begin
@@ -514,9 +510,9 @@ module level1b_mk2_m (
   always @ ( negedge cpu_phi2_w )
     if ( cpu_vpa & cpu_vda ) begin
       if ( map_data_q[`MAP_ROM_IDX])
-        mos_vdu_sync_q <= map_data_q[`SHADOW_MEM_IDX] & ({cpu_hiaddr_lat_q[7],cpu_hiaddr_lat_q[3:0], cpu_adr[15:13]}==8'b1_1111_110);
+        mos_vdu_sync_q <= ({cpu_hiaddr_lat_q[7],cpu_hiaddr_lat_q[3:0], cpu_adr[15:13]}==8'b1_1111_110);
       else
-        mos_vdu_sync_q <= map_data_q[`SHADOW_MEM_IDX] & ({cpu_hiaddr_lat_q[7],cpu_adr[15:13]}==4'b0_110);
+        mos_vdu_sync_q <= ({cpu_hiaddr_lat_q[7],cpu_adr[15:13]}==4'b0_110);
     end // if ( cpu_vpa & cpu_vda )
 
   // Latches for the high address bits open during PHI1

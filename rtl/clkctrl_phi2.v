@@ -14,24 +14,33 @@
   `define USE_LATCH_ENABLE 1
 `endif
 
+`define SINGLE_HS_RETIMER
+
+
 module clkctrl_phi2(
-               input       hsclk_in,
-               input       lsclk_in,
-               input       rst_b,
-               input       hsclk_sel,
-               input       delay_sel,
-               input       cpuclk_div_sel,
-               output      hsclk_selected,
-               output      lsclk_selected,
-               output      clkout
+               input  hsclk_in,
+               input  lsclk_in,
+               input  rst_b,
+               input  hsclk_sel,
+               input  delay_sel,
+               input  cpuclk_div_sel,
+               output hsclk_selected,
+               output lsclk_selected,
+               output clkout,              // Selected clock
+               output fast_clkout          // RAW fast clock (divided down from HSCLK_IN)
                );
 
   reg                      hs_enable_q, ls_enable_q;
   reg                      selected_ls_q;
   reg                      selected_hs_q;
+`ifdef SINGLE_HS_RETIMER
+  reg                      retimed_ls_enable_q;
+`else
   reg [1:0]                retimed_ls_enable_q;
+`endif
   reg                      retimed_hs_enable_q;
   reg [`CLKDEL_PIPE_SZ-1:0] del_q;
+  wire                     retimed_ls_enable_w;
 
   // Force Keep clock nets to prevent ISE merging divider logic into other equations and
   // causing timing issues
@@ -42,6 +51,7 @@ module clkctrl_phi2(
   assign clkout = (cpuclk_w & hs_enable_q) | (lsclk_del_w & ls_enable_q);
   assign lsclk_selected = selected_ls_q;
   assign hsclk_selected = selected_hs_q;
+  assign fast_clkout = cpuclk_w;
 
 `ifdef RIPPLE_DIVIDER
   reg                       ripple_div2_q;
@@ -91,7 +101,7 @@ module clkctrl_phi2(
     if ( !rst_b )
       hs_enable_q <= 1'b0;
     else if ( !cpuclk_w )
-      hs_enable_q <= hsclk_sel & !retimed_ls_enable_q[0];
+      hs_enable_q <= hsclk_sel & !retimed_ls_enable_w;
 `else
   // Simulate a latch transparent on low cpuclk_w by oversampling
   // with hsclk_in - allows 1/2 hsclk cycle less time then using
@@ -100,7 +110,7 @@ module clkctrl_phi2(
     if ( !rst_b )
       hs_enable_q <= 1'b0;
     else if ( !cpuclk_w )
-      hs_enable_q <= hsclk_sel & !retimed_ls_enable_q[0];
+      hs_enable_q <= hsclk_sel & !retimed_ls_enable_w;
 `endif // !`ifdef USE_LATCH_ENABLE
 
   always @ ( negedge lsclk_del_w or negedge rst_b )
@@ -115,6 +125,14 @@ module clkctrl_phi2(
     else
       retimed_hs_enable_q <= selected_hs_q;
 
+`ifdef SINGLE_HS_RETIMER
+  always @ ( negedge cpuclk_w or posedge ls_enable_q )
+    if (ls_enable_q)
+      retimed_ls_enable_q <= 1'b1;
+    else
+      retimed_ls_enable_q <= selected_ls_q;
+  assign retimed_ls_enable_w = retimed_ls_enable_q;
+`else
   // Use two FFs here for safety because reset might be deasserted at the same
   // time as a cpuclk_w negedge (both of which are on a hsclk posedge)
   always @ ( negedge cpuclk_w or posedge ls_enable_q )
@@ -122,5 +140,8 @@ module clkctrl_phi2(
       retimed_ls_enable_q <= 2'b11;
     else
       retimed_ls_enable_q <= {selected_ls_q, retimed_ls_enable_q[1]} ;
+  assign retimed_ls_enable_w = retimed_ls_enable_q[0];
+`endif // !`ifdef SINGLE_HS_RETIMER
+
 
 endmodule
