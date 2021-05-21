@@ -34,7 +34,7 @@
 `define VRAM_AREA_32K          (!cpu_data[7] & !cpu_adr[15] )
 `define VRAM_AREA_32K_N_31K    (!cpu_data[7] & !cpu_adr[15] & (map_data_q[`MAP_VRAM_SZ_IDX] | (cpu_adr[14] | cpu_adr[13]| cpu_adr[12] | cpu_adr[11] | cpu_adr[10])))
 // Fix VRAM Area at most compatible 31K setting
-`define VRAM_AREA              `VRAM_AREA_31K
+`define VRAM_AREA              `VRAM_AREA_20K_N_31K
 
 // Define this to bring decoding back into the main CPLD (mainly for capacity evaluation). Note
 // that the address lsb latches are still assumed external to keep the same pin out. Must be defined
@@ -71,7 +71,7 @@
 `define HOST_TYPE_1_IDX               6
 `define HOST_TYPE_0_IDX               5
 `define MAP_ROM_IDX                   4
-`define SPARE_IDX                     3
+`define MAP_VRAM_SZ_IDX               3
 `define MAP_HSCLK_EN_IDX              2
 `define CLK_DELAY_IDX                 1
 `define CLK_CPUCLK_DIV_IDX            0
@@ -407,7 +407,7 @@ module level1b_mk2_m (
             // Not all bits are used so assign default first, then individual bits
 	    cpu_data_r = 8'b0  ;
 	    cpu_data_r[`MAP_HSCLK_EN_IDX]      = map_data_q[`MAP_HSCLK_EN_IDX] ;
-	    cpu_data_r[`SPARE_IDX]             = 1'b0;
+	    cpu_data_r[`MAP_VRAM_SZ_IDX]       = map_data_q[`MAP_VRAM_SZ_IDX] ;
 	    cpu_data_r[`SHADOW_MEM_IDX]        = map_data_q[`SHADOW_MEM_IDX];
             cpu_data_r[`HOST_TYPE_1_IDX]       = map_data_q[`HOST_TYPE_1_IDX];
             cpu_data_r[`HOST_TYPE_0_IDX]       = map_data_q[`HOST_TYPE_0_IDX];
@@ -434,6 +434,7 @@ module level1b_mk2_m (
       begin
 	map_data_q[`MAP_HSCLK_EN_IDX]    <= 1'b0;
 	map_data_q[`MAP_ROM_IDX]         <= 1'b0;
+	map_data_q[`MAP_VRAM_SZ_IDX]     <= 1'b0;        
         // Use DIP/jumpers to select divider ratio on startup
 	map_data_q[`HOST_TYPE_1_IDX]     <= 1'b0;
 	map_data_q[`HOST_TYPE_0_IDX]     <= 1'b0;
