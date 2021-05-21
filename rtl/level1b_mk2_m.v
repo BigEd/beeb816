@@ -22,6 +22,9 @@
 `define DELAY_RAMOEB_BY_2
 //`define DELAY_RAMOEB_BY_3
 
+// Set this to slow down writes to VRAM area in both Master banks
+`define SLOW_DOWN_BOTH_MASTER_VRAM_BANKS  1
+
 // Define this for Master RAM overlay at 8000
 // `define MASTER_RAM_8000 1
 // Define this for Master RAM overlay at C000
@@ -135,7 +138,7 @@ module level1b_mk2_m (
   reg [7:0]                            cpu_hiaddr_lat_q;
   reg [7:0]                            cpu_data_r;
   reg                                  mos_vdu_sync_q;
-  reg                                  vram_access_lat_q;
+  reg                                  write_thru_lat_q;
   reg                                  rom_wr_protect_lat_q;
   reg [7:0]                            bbc_data_lat_q;
   // This is the internal register controlling which features like high speed clocks etc are enabled
@@ -163,7 +166,7 @@ module level1b_mk2_m (
 `endif
   reg                                  rdy_q;
   wire                                 io_access_pipe_d;
-  reg                                  vram_access_d;
+  reg                                  write_thru_d;
 
 `ifdef FORCE_KEEP_CLOCK
   (* KEEP="TRUE" *) wire               cpu_phi1_w;
@@ -304,7 +307,7 @@ module level1b_mk2_m (
   // * on valid instruction fetches from himem, or
   // * on valid imm/data fetches from himem _if_ hs clock is already selected, or
   // * on invalid bus cycles if hs clock is already selected
-  assign himem_w =  cpu_hiaddr_lat_q[7] & (!vram_access_lat_q | cpu_rnw );
+  assign himem_w =  cpu_hiaddr_lat_q[7] & (!write_thru_lat_q | cpu_rnw );
 
   assign hisync_w = (cpu_vpa&cpu_vda) & cpu_hiaddr_lat_q[7];
   assign sel_hs_w = (( hisync_w & !io_access_pipe_q[0] ) |
@@ -363,7 +366,7 @@ module level1b_mk2_m (
     cpu_a15_lat_d = cpu_adr[15];
     cpu_a14_lat_d = cpu_adr[14];
     cpu_hiaddr_lat_d = cpu_data;
-    vram_access_d = 1'b0;
+    write_thru_d = 1'b0;
 
     // Native mode interrupts go to bank 0xFF (with other native 816 code)
     if ( native_mode_int_w )
@@ -377,15 +380,23 @@ module level1b_mk2_m (
         // Shadow mode enabled - video accesses to bank &FD, other accesses to bank &FF
         if ( `VRAM_AREA & mos_vdu_sync_q ) begin
           cpu_hiaddr_lat_d = 8'hFD;
-          vram_access_d = 1'b1;
+          write_thru_d = 1'b1;
         end
-        else
+        else begin
           cpu_hiaddr_lat_d = 8'hFF;
+`ifdef SLOW_DOWN_BOTH_MASTER_VRAM_BANKS          
+          // In Master host make all accesses to the video area of shadow memory run at
+          // slow write speed incase the shadow bank is used for the display.
+          if ( `VRAM_AREA & `L1_MASTER_MODE)
+            write_thru_d = 1'b1;       
+`endif     
+        end
+        
       end
       else begin
         // Shadow mode disabled - all remapped memory accesses to bank &FF
         cpu_hiaddr_lat_d = 8'hFF;
-        vram_access_d = (`VRAM_AREA) ;
+        write_thru_d = (`VRAM_AREA) ;
       end
     end
     else if (remapped_rom47_access_r | remapped_romCF_access_r | remapped_romAB_access_r) begin
@@ -525,7 +536,7 @@ module level1b_mk2_m (
         cpu_hiaddr_lat_q <= cpu_hiaddr_lat_d ;
         cpu_a15_lat_q <= cpu_a15_lat_d;
         cpu_a14_lat_q <= cpu_a14_lat_d;
-        vram_access_lat_q <= vram_access_d;
+        write_thru_lat_q <= write_thru_d;
         rom_wr_protect_lat_q <= remapped_mos_access_r| remapped_romCF_access_r | remapped_romAB_access_r;
       end
 
