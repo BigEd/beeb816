@@ -22,7 +22,7 @@ module clkctrl_phi2(
                input  lsclk_in,
                input  rst_b,
                input  hsclk_sel,
-               input  delay_sel,
+               input  delay_bypass,
                input  cpuclk_div_sel,
                output hsclk_selected,
                output lsclk_selected,
@@ -46,8 +46,7 @@ module clkctrl_phi2(
   // causing timing issues
   (* KEEP="TRUE" *) wire  cpuclk_w;
   (* KEEP="TRUE" *) wire  lsclk_del_w;
-  // Faster XTAL speeds need a longer delay line
-  assign lsclk_del_w = (delay_sel) ? del_q[0] : del_q[1];
+  assign lsclk_del_w = (delay_bypass) ? lsclk_in : del_q[0];
   assign clkout = (cpuclk_w & hs_enable_q) | (lsclk_del_w & ls_enable_q);
   assign lsclk_selected = selected_ls_q;
   assign hsclk_selected = selected_hs_q;
