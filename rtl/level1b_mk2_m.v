@@ -162,7 +162,9 @@ module level1b_mk2_m (
   reg                                  ram_at_8000;
 `endif
 `ifdef MASTER_RAM_C000
-  reg                                  ram_at_c000;
+  reg                                  acccon_y; // bit 3 of FE34
+  reg                                  acccon_x; // bit 2 of FE34
+  reg                                  acccon_e; // bit 1 of FE34
 `endif
   reg                                  rdy_q;
   wire                                 io_access_pipe_d;
@@ -220,7 +222,7 @@ module level1b_mk2_m (
                     .hsclk_sel(sel_hs_w),
                     .hsclk_selected(hs_selected_w),
                     .cpuclk_div_sel(1'b1),           // Always chose /4 divider now
-                    .delay_bypass (`L1_MASTER_MODE),     // Now bypasses delay chain only for Master mode         
+                    .delay_bypass (`L1_MASTER_MODE),     // Now bypasses delay chain only for Master mode
 //                    .cpuclk_div_sel(map_data_q[`CLK_CPUCLK_DIV_IDX]),
 //                    .delay_sel(map_data_q[`CLK_DELAY_IDX]),
                     .lsclk_selected(ls_selected_w),
@@ -347,7 +349,7 @@ module level1b_mk2_m (
        else
 `ifdef MASTER_RAM_C000
          if ( `L1_MASTER_MODE )
-           remapped_mos_access_r = !(&(cpu_adr[13:10])) & (cpu_adr[13] | !ram_at_c000);
+           remapped_mos_access_r = !(&(cpu_adr[13:10])) & (cpu_adr[13] | !acccon_y);
          else
            remapped_mos_access_r = !(&(cpu_adr[13:10]));
 `else
@@ -378,20 +380,24 @@ module level1b_mk2_m (
     else if ( remapped_ram_access_r ) begin
       if ( map_data_q[`SHADOW_MEM_IDX] ) begin
         // Shadow mode enabled - video accesses to bank &FD, other accesses to bank &FF
+`ifdef MASTER_RAM_C000
+        if ( `VRAM_AREA & (mos_vdu_sync_q ? acccon_e : acccon_x) ) begin
+`else
         if ( `VRAM_AREA & mos_vdu_sync_q ) begin
+`endif
           cpu_hiaddr_lat_d = 8'hFD;
           write_thru_d = 1'b1;
         end
         else begin
           cpu_hiaddr_lat_d = 8'hFF;
-`ifdef SLOW_DOWN_BOTH_MASTER_VRAM_BANKS          
+`ifdef SLOW_DOWN_BOTH_MASTER_VRAM_BANKS
           // In Master host make all accesses to the video area of shadow memory run at
           // slow write speed incase the shadow bank is used for the display.
           if ( `VRAM_AREA & `L1_MASTER_MODE)
-            write_thru_d = 1'b1;       
-`endif     
+            write_thru_d = 1'b1;
+`endif
         end
-        
+
       end
       else begin
         // Shadow mode disabled - all remapped memory accesses to bank &FF
@@ -447,7 +453,7 @@ module level1b_mk2_m (
       begin
 	map_data_q[`MAP_HSCLK_EN_IDX]    <= 1'b0;
 	map_data_q[`MAP_ROM_IDX]         <= 1'b0;
-	map_data_q[`MAP_VRAM_SZ_IDX]     <= 1'b0;        
+	map_data_q[`MAP_VRAM_SZ_IDX]     <= 1'b0;
         // Use DIP/jumpers to select divider ratio on startup
 	map_data_q[`HOST_TYPE_1_IDX]     <= 1'b0;
 	map_data_q[`HOST_TYPE_0_IDX]     <= 1'b0;
@@ -459,13 +465,14 @@ module level1b_mk2_m (
         ram_at_8000 <= 1'b0;
 `endif
 `ifdef MASTER_RAM_C000
-        ram_at_c000 <= 1'b0;
+        {acccon_y, acccon_x, acccon_e} <= 3'b000;
 `endif
       end
     else
       begin
         if (cpld_reg_sel_w[`CPLD_REG_SEL_MAP_CC_IDX] & !cpu_rnw) begin
 	  map_data_q[`MAP_HSCLK_EN_IDX]   <= cpu_data[`MAP_HSCLK_EN_IDX] ;
+	  map_data_q[`MAP_VRAM_SZ_IDX]    <= cpu_data[`MAP_VRAM_SZ_IDX];
 	  map_data_q[`SHADOW_MEM_IDX]     <= cpu_data[`SHADOW_MEM_IDX];
           map_data_q[`HOST_TYPE_1_IDX]    <= cpu_data[`HOST_TYPE_1_IDX];
           map_data_q[`HOST_TYPE_0_IDX]    <= cpu_data[`HOST_TYPE_0_IDX];
@@ -484,7 +491,7 @@ module level1b_mk2_m (
             map_data_q[`SHADOW_MEM_IDX] <= cpu_data[`SHADOW_MEM_IDX];
 `ifdef MASTER_RAM_C000
           if `L1_MASTER_MODE
-            ram_at_c000 <= cpu_data[3];
+            {acccon_y, acccon_x, acccon_e} <= cpu_data[3:1];
 `endif
         end
       end // else: !if( !resetb )
@@ -523,6 +530,11 @@ module level1b_mk2_m (
   //
   always @ ( negedge cpu_phi2_w )
     if ( cpu_vpa & cpu_vda ) begin
+`ifdef MASTER_RAM_C000
+      if ( `L1_MASTER_MODE && acccon_y )
+        mos_vdu_sync_q <= 1'b0;
+      else
+`endif
       if ( map_data_q[`MAP_ROM_IDX])
         mos_vdu_sync_q <= ({cpu_hiaddr_lat_q[7],cpu_hiaddr_lat_q[3:0], cpu_adr[15:13]}==8'b1_1111_110);
       else
