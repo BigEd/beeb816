@@ -222,9 +222,8 @@ module level1b_mk2_m (
                     .hsclk_sel(sel_hs_w),
                     .hsclk_selected(hs_selected_w),
                     .cpuclk_div_sel(1'b1),           // Always chose /4 divider now
-                    .delay_bypass (`L1_MASTER_MODE),     // Now bypasses delay chain only for Master mode
 //                    .cpuclk_div_sel(map_data_q[`CLK_CPUCLK_DIV_IDX]),
-//                    .delay_sel(map_data_q[`CLK_DELAY_IDX]),
+                    .delay_bypass(map_data_q[`CLK_DELAY_IDX]),
                     .lsclk_selected(ls_selected_w),
                     .clkout(cpu_phi1_w),
                     .fast_clkout(fast_clk_w)
