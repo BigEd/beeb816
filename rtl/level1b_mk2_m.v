@@ -220,7 +220,7 @@ module level1b_mk2_m (
                     .hsclk_sel(sel_hs_w),
                     .hsclk_selected(hs_selected_w),
                     .cpuclk_div_sel(1'b1),           // Always chose /4 divider now
-                    .delay_bypass (`L1_MASTER_MODE),     // Now bypasses delay chain only for Master mode         
+                    .delay_bypass (`L1_MASTER_MODE),     // Now bypasses delay chain only for Master mode
 //                    .cpuclk_div_sel(map_data_q[`CLK_CPUCLK_DIV_IDX]),
 //                    .delay_sel(map_data_q[`CLK_DELAY_IDX]),
                     .lsclk_selected(ls_selected_w),
@@ -384,14 +384,14 @@ module level1b_mk2_m (
         end
         else begin
           cpu_hiaddr_lat_d = 8'hFF;
-`ifdef SLOW_DOWN_BOTH_MASTER_VRAM_BANKS          
+`ifdef SLOW_DOWN_BOTH_MASTER_VRAM_BANKS
           // In Master host make all accesses to the video area of shadow memory run at
           // slow write speed incase the shadow bank is used for the display.
           if ( `VRAM_AREA & `L1_MASTER_MODE)
-            write_thru_d = 1'b1;       
-`endif     
+            write_thru_d = 1'b1;
+`endif
         end
-        
+
       end
       else begin
         // Shadow mode disabled - all remapped memory accesses to bank &FF
@@ -447,7 +447,7 @@ module level1b_mk2_m (
       begin
 	map_data_q[`MAP_HSCLK_EN_IDX]    <= 1'b0;
 	map_data_q[`MAP_ROM_IDX]         <= 1'b0;
-	map_data_q[`MAP_VRAM_SZ_IDX]     <= 1'b0;        
+	map_data_q[`MAP_VRAM_SZ_IDX]     <= 1'b0;
         // Use DIP/jumpers to select divider ratio on startup
 	map_data_q[`HOST_TYPE_1_IDX]     <= 1'b0;
 	map_data_q[`HOST_TYPE_0_IDX]     <= 1'b0;
