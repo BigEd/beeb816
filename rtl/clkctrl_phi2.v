@@ -5,6 +5,8 @@
 
 // Select this to use a simple /2, /4 ripple counter divider
 `define RIPPLE_DIVIDER
+// Set this for super slow debug clocking
+//`define RIPPLE_DIV8 1
 // Select this to use the /2 and /3 rather than /2 and /4 in the synchronous divider module
 //`define USE_DIVIDER_23
 
@@ -14,8 +16,7 @@
   `define USE_LATCH_ENABLE 1
 `endif
 
-`define SINGLE_HS_RETIMER
-
+`define SINGLE_HS_RETIMER 1
 
 module clkctrl_phi2(
                input  hsclk_in,
@@ -55,11 +56,20 @@ module clkctrl_phi2(
 `ifdef RIPPLE_DIVIDER
   reg                       ripple_div2_q;
   reg                       ripple_div4_q;
+  `ifdef RIPPLE_DIV8
+  reg                       ripple_div8_q;
+  `endif
   always @ ( posedge hsclk_in )
     ripple_div2_q <= !ripple_div2_q;
   always @ ( posedge ripple_div2_q )
     ripple_div4_q <= !ripple_div4_q;
+  `ifdef RIPPLE_DIV8
+  always @ ( posedge ripple_div4_q )
+    ripple_div8_q <= !ripple_div8_q;
+  assign cpuclk_w = ( cpuclk_div_sel) ? ripple_div8_q : ripple_div2_q;
+  `else
   assign cpuclk_w = ( cpuclk_div_sel) ? ripple_div4_q : ripple_div2_q;
+  `endif
 `else
   clkdiv234 divider_u ( .clkin(hsclk_in),
                         .rstb(rst_b),

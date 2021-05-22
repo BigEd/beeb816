@@ -383,7 +383,7 @@ module level1b_mk2_m (
 `ifdef MASTER_RAM_C000
         if ( `VRAM_AREA & (mos_vdu_sync_q ? acccon_e : acccon_x) ) begin
 `else
-        if ( `VRAM_AREA & mos_vdu_sync_q ) begin
+        if (`VRAM_AREA & mos_vdu_sync_q ) begin
 `endif
           cpu_hiaddr_lat_d = 8'hFD;
           write_thru_d = 1'b1;
@@ -465,7 +465,8 @@ module level1b_mk2_m (
         ram_at_8000 <= 1'b0;
 `endif
 `ifdef MASTER_RAM_C000
-        {acccon_y, acccon_x, acccon_e} <= 3'b000;
+        // Force accon_e to 1'b1 when NOT in Master mode
+        {acccon_y, acccon_x, acccon_e} <= { 2'b00, !(`L1_MASTER_MODE) } ;
 `endif
       end
     else
