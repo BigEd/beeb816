@@ -38,8 +38,6 @@
 `define VRAM_AREA_31K          (!cpu_data[7] & !cpu_adr[15]  &(cpu_adr[14] | (cpu_adr[13]| cpu_adr[12] | cpu_adr[11] | cpu_adr[10])))
 `define VRAM_AREA_32K          (!cpu_data[7] & !cpu_adr[15] )
 `define VRAM_AREA_32K_N_31K    (!cpu_data[7] & !cpu_adr[15] & (map_data_q[`MAP_VRAM_SZ_IDX] | (cpu_adr[14] | cpu_adr[13]| cpu_adr[12] | cpu_adr[11] | cpu_adr[10])))
-// Fix VRAM Area at most compatible 31K setting
-`define VRAM_AREA              `VRAM_AREA_20K_N_31K
 
 // Define this to bring decoding back into the main CPLD (mainly for capacity evaluation). Note
 // that the address lsb latches are still assumed external to keep the same pin out. Must be defined
@@ -96,10 +94,12 @@
   `define MASTER_RAM_8000 1
   `define MASTER_RAM_C000 1
   `define L1_MASTER_MODE (map_data_q[`HOST_TYPE_1_IDX:`HOST_TYPE_0_IDX]==2'b11)
+  `define VRAM_AREA              `VRAM_AREA_20K_N_31K
 `else
   `undef  MASTER_RAM_8000
   `undef  MASTER_RAM_C000
   `define L1_MASTER_MODE (1'b0)
+  `define VRAM_AREA              `VRAM_AREA_31K
 `endif
 
 
@@ -461,13 +461,13 @@ module level1b_mk2_m (
       begin
 	map_data_q[`MAP_HSCLK_EN_IDX]    <= 1'b0;
 	map_data_q[`MAP_ROM_IDX]         <= 1'b0;
-	map_data_q[`MAP_VRAM_SZ_IDX]     <= 1'b0;
+	map_data_q[`MAP_VRAM_SZ_IDX]     <= j[1];  // DIP2
         // Use DIP/jumpers to select divider ratio on startup
 	map_data_q[`HOST_TYPE_1_IDX]     <= 1'b0;
 	map_data_q[`HOST_TYPE_0_IDX]     <= 1'b0;
-	map_data_q[`CLK_CPUCLK_DIV_IDX]  <= j[0];
-	map_data_q[`CLK_DELAY_IDX]       <= j[1];
-	map_data_q[`SHADOW_MEM_IDX]      <= 1'b0;
+	map_data_q[`CLK_CPUCLK_DIV_IDX]  <= 1'b0;
+	map_data_q[`CLK_DELAY_IDX]       <= j[1];  // DIP2
+	map_data_q[`SHADOW_MEM_IDX]      <= j[0];  // DIP1
         bbc_pagereg_q <= {`BBC_PAGEREG_SZ{1'b0}};
 `ifdef MASTER_RAM_8000
         ram_at_8000 <= 1'b0;
