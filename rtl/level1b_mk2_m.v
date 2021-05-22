@@ -466,6 +466,7 @@ module level1b_mk2_m (
       begin
         if (cpld_reg_sel_w[`CPLD_REG_SEL_MAP_CC_IDX] & !cpu_rnw) begin
 	  map_data_q[`MAP_HSCLK_EN_IDX]   <= cpu_data[`MAP_HSCLK_EN_IDX] ;
+	  map_data_q[`MAP_VRAM_SZ_IDX]    <= cpu_data[`MAP_VRAM_SZ_IDX];
 	  map_data_q[`SHADOW_MEM_IDX]     <= cpu_data[`SHADOW_MEM_IDX];
           map_data_q[`HOST_TYPE_1_IDX]    <= cpu_data[`HOST_TYPE_1_IDX];
           map_data_q[`HOST_TYPE_0_IDX]    <= cpu_data[`HOST_TYPE_0_IDX];
