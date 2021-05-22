@@ -15,7 +15,7 @@
 `define FORCE_KEEP_CLOCK 1
 
 // Define to drive clocks to test points tp[1:0]
-`define OBSERVE_CLOCKS 1
+//`define OBSERVE_CLOCKS 1
 
 // Set one of these to falling edge of RAMOEB by one buffer when running with fast SRAM
 //`define DELAY_RAMOEB_BY_1
@@ -25,6 +25,8 @@
 // Set this to slow down writes to VRAM area in both Master banks
 `define SLOW_DOWN_BOTH_MASTER_VRAM_BANKS  1
 
+// Define this for BBC MASTER support
+// `define ALLOW_BBC_MASTER_HOST 1
 // Define this for Master RAM overlay at 8000
 // `define MASTER_RAM_8000 1
 // Define this for Master RAM overlay at C000
@@ -46,12 +48,13 @@
 
 `ifdef MARK2B
   // Enable MASTER code
-  `define MASTER_RAM_8000 1
-  `define MASTER_RAM_C000 1
+  `define ALLOW_BBC_MASTER_HOST 1
   // All-in-one CPLD - no offloading of decoding to external IC
   `define LOCAL_DECODING 1
   // Remove this definition to improve MHz at cost of logic
   `undef FORCE_KEEP_CLOCK
+  // Enough macrocells to export the clock to test points
+  `define OBSERVE_CLOCKS 1
 `endif //  `ifdef MARK2B
 
 
@@ -88,7 +91,16 @@
 `define L1_BEEB_MODE   (map_data_q[`HOST_TYPE_1_IDX:`HOST_TYPE_0_IDX]==2'b00)
 `define L1_BPLUS_MODE  (map_data_q[`HOST_TYPE_1_IDX:`HOST_TYPE_0_IDX]==2'b01)
 `define L1_ELK_MODE    (map_data_q[`HOST_TYPE_1_IDX:`HOST_TYPE_0_IDX]==2'b10)
-`define L1_MASTER_MODE (map_data_q[`HOST_TYPE_1_IDX:`HOST_TYPE_0_IDX]==2'b11)
+
+`ifdef ALLOW_BBC_MASTER_HOST
+  `define MASTER_RAM_8000 1
+  `define MASTER_RAM_C000 1
+  `define L1_MASTER_MODE (map_data_q[`HOST_TYPE_1_IDX:`HOST_TYPE_0_IDX]==2'b11)
+`else
+  `undef  MASTER_RAM_8000
+  `undef  MASTER_RAM_C000
+  `define L1_MASTER_MODE (1'b0)
+`endif
 
 
 module level1b_mk2_m (
@@ -347,14 +359,11 @@ module level1b_mk2_m (
        // Remap MOS from C000-FBFF only (exclude IO space and vectors)
        else
 `ifdef MASTER_RAM_C000
-         if ( `L1_MASTER_MODE )
-           remapped_mos_access_r = !(&(cpu_adr[13:10])) & (cpu_adr[13] | !acccon_y);
-         else
-           remapped_mos_access_r = !(&(cpu_adr[13:10]));
+         remapped_mos_access_r = !(&(cpu_adr[13:10])) & (cpu_adr[13] | !acccon_y);
 `else
          remapped_mos_access_r = !(&(cpu_adr[13:10]));
 `endif
-     end
+    end
   end
 
   always @ ( * ) begin
@@ -464,7 +473,6 @@ module level1b_mk2_m (
         ram_at_8000 <= 1'b0;
 `endif
 `ifdef MASTER_RAM_C000
-        // Force accon_e to 1'b1 when NOT in Master mode
         {acccon_y, acccon_x, acccon_e} <= { 2'b00, !(`L1_MASTER_MODE) } ;
 `endif
       end
@@ -531,7 +539,7 @@ module level1b_mk2_m (
   always @ ( negedge cpu_phi2_w )
     if ( cpu_vpa & cpu_vda ) begin
 `ifdef MASTER_RAM_C000
-      if ( `L1_MASTER_MODE && acccon_y )
+      if ( acccon_y )
         mos_vdu_sync_q <= 1'b0;
       else
 `endif
