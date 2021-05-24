@@ -21,7 +21,7 @@ else
     if [ $design == beeb816_mk2b ] ; then
        sed 's/level1b_mk2_m/beeb816_mk2b/g' level1b_mk2_m.v |\
        perl -pale 's/(.*define\s+MARK2B.*)/\`define MARK2B 1/g'> beeb816_mk2b.v
-    fi    
+    fi
 fi
 
 
@@ -55,4 +55,3 @@ cd $startdir
 if [[ -f "beeb816_mk2b.v" ]] ; then
     rm -rf beeb816_mk2b.v
 fi
-

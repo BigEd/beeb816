@@ -23,7 +23,7 @@
 //`define DELAY_RAMOEB_BY_3
 
 // Set this to slow down writes to VRAM area in both Master banks
-`define SLOW_DOWN_BOTH_MASTER_VRAM_BANKS  1
+//`define SLOW_DOWN_BOTH_MASTER_VRAM_BANKS  1
 
 // Define this for BBC MASTER support
 // `define ALLOW_BBC_MASTER_HOST 1
@@ -95,9 +95,11 @@
   `define MASTER_RAM_C000 1
   `define L1_MASTER_MODE (map_data_q[`HOST_TYPE_1_IDX:`HOST_TYPE_0_IDX]==2'b11)
   `define VRAM_AREA              `VRAM_AREA_20K_N_31K
+  `define SLOW_DOWN_BOTH_MASTER_VRAM_BANKS  1
 `else
   `undef  MASTER_RAM_8000
   `undef  MASTER_RAM_C000
+  `undef  SLOW_DOWN_BOTH_MASTER_VRAM_BANKS
   `define L1_MASTER_MODE (1'b0)
   `define VRAM_AREA              `VRAM_AREA_31K
 `endif
@@ -383,16 +385,10 @@ module level1b_mk2_m (
       cpu_hiaddr_lat_d = 8'hFF;
     else if ( remapped_mos_access_r ) begin
       cpu_hiaddr_lat_d = 8'hFF;
-      cpu_a14_lat_d = 1'b0;
     end
     else if ( remapped_ram_access_r ) begin
       if ( map_data_q[`SHADOW_MEM_IDX] ) begin
-        // Shadow mode enabled - video accesses to bank &FD, other accesses to bank &FF
-`ifdef MASTER_RAM_C000
-        if ( `VRAM_AREA & (mos_vdu_sync_q ? acccon_e : acccon_x) ) begin
-`else
         if (`VRAM_AREA & mos_vdu_sync_q ) begin
-`endif
           cpu_hiaddr_lat_d = 8'hFD;
           write_thru_d = 1'b1;
         end
@@ -533,20 +529,24 @@ module level1b_mk2_m (
   // - in the range FFC000 - FFDFFF (if remapped to himem )
   // - OR in range 00C000 - 00DFFF if ROM remapping disabled.
   //
-  // ie 11111111_110xxxxx  (decoded as 1xxx1111_110xxxx)
+  // ie 11111111_110xxxxx  (decoded as 1xxx11xx_110xxxx)
   //    00000000_110xxxxx  (decoded as 0xxxxxxx_110xxxx)
   //
   always @ ( negedge cpu_phi2_w )
     if ( cpu_vpa & cpu_vda ) begin
 `ifdef MASTER_RAM_C000
       if ( acccon_y )
-        mos_vdu_sync_q <= 1'b0;
+        mos_vdu_sync_q <= acccon_x;
+      else if ( map_data_q[`MAP_ROM_IDX])
+        mos_vdu_sync_q <= ({cpu_hiaddr_lat_q[7], cpu_hiaddr_lat_q[3:2],cpu_adr[15:13]}==6'b1_11_110) ? acccon_e : acccon_x;
       else
-`endif
+        mos_vdu_sync_q <= ({cpu_hiaddr_lat_q[7],cpu_adr[15:13]}==4'b0_110) ? acccon_e : acccon_x;
+`else
       if ( map_data_q[`MAP_ROM_IDX])
-        mos_vdu_sync_q <= ({cpu_hiaddr_lat_q[7],cpu_hiaddr_lat_q[3:0], cpu_adr[15:13]}==8'b1_1111_110);
+        mos_vdu_sync_q <= ({cpu_hiaddr_lat_q[7], cpu_hiaddr_lat_q[3:2],cpu_adr[15:13]}==6'b1_11_110) ;
       else
-        mos_vdu_sync_q <= ({cpu_hiaddr_lat_q[7],cpu_adr[15:13]}==4'b0_110);
+        mos_vdu_sync_q <= ({cpu_hiaddr_lat_q[7],cpu_adr[15:13]}==4'b0_110) ;
+`endif
     end // if ( cpu_vpa & cpu_vda )
 
   // Latches for the high address bits open during PHI1
