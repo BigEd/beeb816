@@ -93,7 +93,8 @@
 `ifdef ALLOW_BBC_MASTER_HOST
   `define MASTER_RAM_8000 1
   `define MASTER_RAM_C000 1
-  `define L1_MASTER_MODE (map_data_q[`HOST_TYPE_1_IDX:`HOST_TYPE_0_IDX]==2'b11)
+//  `define L1_MASTER_MODE (map_data_q[`HOST_TYPE_1_IDX:`HOST_TYPE_0_IDX]==2'b11)
+  `define L1_MASTER_MODE          ( bbc_master_mode_q )
   `define VRAM_AREA              `VRAM_AREA_20K_N_31K
   `define SLOW_DOWN_BOTH_MASTER_VRAM_BANKS  1
 `else
@@ -172,6 +173,9 @@ module level1b_mk2_m (
   reg                                  cpu_a14_lat_q;
   reg [7:0]                            cpu_hiaddr_lat_d;
   reg [ `IO_ACCESS_DELAY_SZ-1:0]       io_access_pipe_q;
+`ifdef ALLOW_BBC_MASTER_HOST
+  reg                                  bbc_master_mode_q;
+`endif
 `ifdef MASTER_RAM_8000
   reg                                  ram_at_8000;
 `endif
@@ -564,5 +568,10 @@ module level1b_mk2_m (
   always @ ( * )
     if ( !bbc_phi1 )
       bbc_data_lat_q <= bbc_data;
+
+`ifdef ALLOW_BBC_MASTER_MODE
+  always @ ( negedge cpu_phi2_w)
+    bbc_master_mode_q <= (map_data_q[`HOST_TYPE_1_IDX:`HOST_TYPE_0_IDX]==2'b11) ;
+`endif
 
 endmodule // level1b_m
