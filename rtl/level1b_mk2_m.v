@@ -35,6 +35,9 @@
 `define VRAM_AREA_31K          (!cpu_data[7] & !cpu_adr[15]  &(cpu_adr[14] | (cpu_adr[13]| cpu_adr[12] | cpu_adr[11] | cpu_adr[10])))
 `define VRAM_AREA_32K          (!cpu_data[7] & !cpu_adr[15] )
 `define VRAM_AREA_32K_N_31K    (!cpu_data[7] & !cpu_adr[15] & (map_data_q[`MAP_VRAM_SZ_IDX] | (cpu_adr[14] | cpu_adr[13]| cpu_adr[12] | cpu_adr[11] | cpu_adr[10])))
+`define LOWMEM_1K              (!cpu_data[7] & !cpu_adr[15]  & !(|cpu_adr[14:10]))
+`define LOWMEM_12K             (!cpu_data[7] & !cpu_adr[15] & !(cpu_adr[14] | (cpu_adr[13]&cpu_adr[12])))
+`define LYNNE_20K              (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | (cpu_adr[13]&cpu_adr[12])))
 
 // Define this to bring decoding back into the main CPLD (mainly for capacity evaluation). Note
 // that the address lsb latches are still assumed external to keep the same pin out. Must be defined
@@ -92,7 +95,7 @@
   `define MASTER_RAM_C000 1
 //  `define L1_MASTER_MODE (map_data_q[`HOST_TYPE_1_IDX:`HOST_TYPE_0_IDX]==2'b11)
   `define L1_MASTER_MODE          ( bbc_master_mode_q )
-  `define VRAM_AREA              `VRAM_AREA_20K_N_31K
+//  `define VRAM_AREA              `VRAM_AREA_20K_N_31K
 `else
   `undef  MASTER_RAM_8000
   `undef  MASTER_RAM_C000
@@ -161,7 +164,6 @@ module level1b_mk2_m (
   reg                                  remapped_romAB_access_r ;
   reg                                  remapped_romCF_access_r ;
   reg                                  remapped_mos_access_r ;
-  reg                                  remapped_ram_access_r ;
   reg                                  cpu_a15_lat_d;
   reg                                  cpu_a14_lat_d;
   reg                                  cpu_a15_lat_q;
@@ -362,11 +364,6 @@ module level1b_mk2_m (
   end
 
   always @ ( * ) begin
-    // Remap all of RAM area now and deal with video accesses separately
-    remapped_ram_access_r = !cpu_data[7] & !cpu_adr[15] ;
-  end
-
-  always @ ( * ) begin
     // Default assignments
     cpu_a15_lat_d = cpu_adr[15];
     cpu_a14_lat_d = cpu_adr[14];
@@ -377,26 +374,41 @@ module level1b_mk2_m (
     if ( native_mode_int_w )
       cpu_hiaddr_lat_d = 8'hFF;
     else begin
-      if ( remapped_ram_access_r ) begin
-        if ( map_data_q[`SHADOW_MEM_IDX] ) begin
-          if (`VRAM_AREA & mos_vdu_sync_q ) begin
-            cpu_hiaddr_lat_d = 8'hFD;
-            write_thru_d = 1'b1;
-          end
-          else begin
+      // remap all accesses which were originally destined for host RAM
+      if ( !cpu_data[7] & !cpu_adr[15]) begin
+        if ( `LOWMEM_1K )
+          // All hosts, all access to bottom 1K is high speed to bank &FF
+          cpu_hiaddr_lat_d = 8'hFF;
+`ifdef ALLOW_BBC_MASTER_HOST
+        else if ( bbc_master_mode_q ) begin
+          // All accesses from Master to memory above the 1K base is write-through
+          write_thru_d = 1'b1;
+          if (`LOWMEM_12K )
+            // All accesses to memory below LYNNE go to main bank
             cpu_hiaddr_lat_d = 8'hFF;
-            // In Master host make all accesses to the video area of shadow memory run at
-            // slow write speed incase the shadow bank is used for the display.
-            if ( `VRAM_AREA & `L1_MASTER_MODE)
-              write_thru_d = 1'b1;
-          end
+          else if (map_data_q[`SHADOW_MEM_IDX] && mos_vdu_sync_q)
+            // Shadow mode accesses using VDU calls go to alternate bank
+            cpu_hiaddr_lat_d = 8'hFD;
+          else
+            // Shadow mode accesses _not_ using VDU calls and non Shadow mode accesses
+            cpu_hiaddr_lat_d = 8'hFF;
+        end
+`endif
+        else if ( !map_data_q[`SHADOW_MEM_IDX] ) begin
+          // Beeb/Elk accesses to rest of RAM in non-shadow mode
+          cpu_hiaddr_lat_d = 8'hFF;
+          write_thru_d = 1'b1;
+        end
+        else if ( mos_vdu_sync_q ) begin
+          // Beeb/Elk accesses to rest of RAM in Shadow mode but via VDU calls
+          cpu_hiaddr_lat_d = 8'hFF;
+          write_thru_d = 1'b1;
         end
         else begin
-          // Shadow mode disabled - all remapped memory accesses to bank &FF
-          cpu_hiaddr_lat_d = 8'hFF;
-          write_thru_d = (`VRAM_AREA) ;
-        end // else: !if( map_data_q[`SHADOW_MEM_IDX] )
-      end // if ( remapped_ram_access_r )
+          // Beeb/Elk accesses to rest of RAM in Shadow mode, non VDU calls
+          cpu_hiaddr_lat_d = 8'hFD;
+        end
+      end
 
       if ( remapped_mos_access_r )
         cpu_hiaddr_lat_d = 8'hFF;
@@ -422,7 +434,7 @@ module level1b_mk2_m (
             // Not all bits are used so assign default first, then individual bits
 	    cpu_data_r = 8'b0  ;
 	    cpu_data_r[`MAP_HSCLK_EN_IDX]      = map_data_q[`MAP_HSCLK_EN_IDX] ;
-	    cpu_data_r[`MAP_VRAM_SZ_IDX]       = map_data_q[`MAP_VRAM_SZ_IDX] ;
+	    cpu_data_r[`MAP_VRAM_SZ_IDX]       = 1'b0 ; // map_data_q[`MAP_VRAM_SZ_IDX] ;
 	    cpu_data_r[`SHADOW_MEM_IDX]        = map_data_q[`SHADOW_MEM_IDX];
             cpu_data_r[`HOST_TYPE_1_IDX]       = map_data_q[`HOST_TYPE_1_IDX];
             cpu_data_r[`HOST_TYPE_0_IDX]       = map_data_q[`HOST_TYPE_0_IDX];
@@ -449,13 +461,13 @@ module level1b_mk2_m (
       begin
 	map_data_q[`MAP_HSCLK_EN_IDX]    <= 1'b0;
 	map_data_q[`MAP_ROM_IDX]         <= 1'b0;
-	map_data_q[`MAP_VRAM_SZ_IDX]     <= j[1];  // DIP2
+	map_data_q[`MAP_VRAM_SZ_IDX]     <= 1'b0 ; //j[1];  // DIP2
         // Use DIP/jumpers to select divider ratio on startup
 	map_data_q[`HOST_TYPE_1_IDX]     <= 1'b0;
 	map_data_q[`HOST_TYPE_0_IDX]     <= 1'b0;
 	map_data_q[`CLK_CPUCLK_DIV_IDX]  <= 1'b0;
 	map_data_q[`CLK_DELAY_IDX]       <= j[1];  // DIP2
-	map_data_q[`SHADOW_MEM_IDX]      <= j[0];  // DIP1
+	map_data_q[`SHADOW_MEM_IDX]      <= j[1];  // DIP2
         bbc_pagereg_q <= {`BBC_PAGEREG_SZ{1'b0}};
 `ifdef MASTER_RAM_8000
         ram_at_8000_q <= 1'b0;
@@ -468,7 +480,7 @@ module level1b_mk2_m (
       begin
         if (cpld_reg_sel_w[`CPLD_REG_SEL_MAP_CC_IDX] & !cpu_rnw) begin
 	  map_data_q[`MAP_HSCLK_EN_IDX]   <= cpu_data[`MAP_HSCLK_EN_IDX] ;
-	  map_data_q[`MAP_VRAM_SZ_IDX]    <= cpu_data[`MAP_VRAM_SZ_IDX];
+	  map_data_q[`MAP_VRAM_SZ_IDX]    <= 1'b0 ; // cpu_data[`MAP_VRAM_SZ_IDX];
 	  map_data_q[`SHADOW_MEM_IDX]     <= cpu_data[`SHADOW_MEM_IDX];
           map_data_q[`HOST_TYPE_1_IDX]    <= cpu_data[`HOST_TYPE_1_IDX];
           map_data_q[`HOST_TYPE_0_IDX]    <= cpu_data[`HOST_TYPE_0_IDX];
