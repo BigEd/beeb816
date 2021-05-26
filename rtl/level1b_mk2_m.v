@@ -22,9 +22,6 @@
 `define DELAY_RAMOEB_BY_2
 //`define DELAY_RAMOEB_BY_3
 
-// Set this to slow down writes to VRAM area in both Master banks
-//`define SLOW_DOWN_BOTH_MASTER_VRAM_BANKS  1
-
 // Define this for BBC MASTER support
 // `define ALLOW_BBC_MASTER_HOST 1
 // Define this for Master RAM overlay at 8000
@@ -96,11 +93,9 @@
 //  `define L1_MASTER_MODE (map_data_q[`HOST_TYPE_1_IDX:`HOST_TYPE_0_IDX]==2'b11)
   `define L1_MASTER_MODE          ( bbc_master_mode_q )
   `define VRAM_AREA              `VRAM_AREA_20K_N_31K
-  `define SLOW_DOWN_BOTH_MASTER_VRAM_BANKS  1
 `else
   `undef  MASTER_RAM_8000
   `undef  MASTER_RAM_C000
-  `undef  SLOW_DOWN_BOTH_MASTER_VRAM_BANKS
   `define L1_MASTER_MODE (1'b0)
   `define VRAM_AREA              `VRAM_AREA_31K
 `endif
@@ -381,43 +376,42 @@ module level1b_mk2_m (
     // Native mode interrupts go to bank 0xFF (with other native 816 code)
     if ( native_mode_int_w )
       cpu_hiaddr_lat_d = 8'hFF;
-    else if ( remapped_mos_access_r ) begin
-      cpu_hiaddr_lat_d = 8'hFF;
-    end
-    else if ( remapped_ram_access_r ) begin
-      if ( map_data_q[`SHADOW_MEM_IDX] ) begin
-        if (`VRAM_AREA & mos_vdu_sync_q ) begin
-          cpu_hiaddr_lat_d = 8'hFD;
-          write_thru_d = 1'b1;
+    else begin
+      if ( remapped_ram_access_r ) begin
+        if ( map_data_q[`SHADOW_MEM_IDX] ) begin
+          if (`VRAM_AREA & mos_vdu_sync_q ) begin
+            cpu_hiaddr_lat_d = 8'hFD;
+            write_thru_d = 1'b1;
+          end
+          else begin
+            cpu_hiaddr_lat_d = 8'hFF;
+            // In Master host make all accesses to the video area of shadow memory run at
+            // slow write speed incase the shadow bank is used for the display.
+            if ( `VRAM_AREA & `L1_MASTER_MODE)
+              write_thru_d = 1'b1;
+          end
         end
         else begin
+          // Shadow mode disabled - all remapped memory accesses to bank &FF
           cpu_hiaddr_lat_d = 8'hFF;
-`ifdef SLOW_DOWN_BOTH_MASTER_VRAM_BANKS
-          // In Master host make all accesses to the video area of shadow memory run at
-          // slow write speed incase the shadow bank is used for the display.
-          if ( `VRAM_AREA & `L1_MASTER_MODE)
-            write_thru_d = 1'b1;
-`endif
-        end
+          write_thru_d = (`VRAM_AREA) ;
+        end // else: !if( map_data_q[`SHADOW_MEM_IDX] )
+      end // if ( remapped_ram_access_r )
 
-      end
-      else begin
-        // Shadow mode disabled - all remapped memory accesses to bank &FF
+      if ( remapped_mos_access_r )
         cpu_hiaddr_lat_d = 8'hFF;
-        write_thru_d = (`VRAM_AREA) ;
+      else if (remapped_rom47_access_r | remapped_romCF_access_r | remapped_romAB_access_r) begin
+        if ( remapped_rom47_access_r )
+          cpu_hiaddr_lat_d = 8'hFC;
+        else if ( remapped_romAB_access_r )
+          cpu_hiaddr_lat_d = 8'hFD;
+        else if ( remapped_romCF_access_r)
+          cpu_hiaddr_lat_d = 8'hFE;
+        cpu_a15_lat_d = bbc_pagereg_q[1];
+        cpu_a14_lat_d = bbc_pagereg_q[0];
       end
-    end
-    else if (remapped_rom47_access_r | remapped_romCF_access_r | remapped_romAB_access_r) begin
-      if ( remapped_rom47_access_r )
-        cpu_hiaddr_lat_d = 8'hFC;
-      else if ( remapped_romAB_access_r )
-        cpu_hiaddr_lat_d = 8'hFD;
-      else if ( remapped_romCF_access_r)
-        cpu_hiaddr_lat_d = 8'hFE;
-      cpu_a15_lat_d = bbc_pagereg_q[1];
-      cpu_a14_lat_d = bbc_pagereg_q[0];
-    end
-  end
+    end // else: !if( native_mode_int_w )
+  end // always @ ( * )
 
   // drive cpu data if we're reading internal register or making a non dummy read from lomem
   always @ ( * )
