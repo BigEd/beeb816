@@ -26,7 +26,7 @@
 //`define SLOW_DOWN_BOTH_MASTER_VRAM_BANKS  1
 
 // Set this to relocate the MOS within the new bank from C000 to 8000
-//`define RELOCATE_MOS 1
+`define RELOCATE_MOS 1
 
 // Define this for BBC MASTER support
 // `define ALLOW_BBC_MASTER_HOST 1
@@ -41,6 +41,9 @@
 `define VRAM_AREA_31K          (!cpu_data[7] & !cpu_adr[15]  &(cpu_adr[14] | (cpu_adr[13]| cpu_adr[12] | cpu_adr[11] | cpu_adr[10])))
 `define VRAM_AREA_32K          (!cpu_data[7] & !cpu_adr[15] )
 `define VRAM_AREA_32K_N_31K    (!cpu_data[7] & !cpu_adr[15] & (map_data_q[`MAP_VRAM_SZ_IDX] | (cpu_adr[14] | cpu_adr[13]| cpu_adr[12] | cpu_adr[11] | cpu_adr[10])))
+`define LOWMEM_1K              (!cpu_data[7] & !cpu_adr[15]  & !(|cpu_adr[14:10]))
+`define LOWMEM_12K             (!cpu_data[7] & !cpu_adr[15] & !(cpu_adr[14] | (cpu_adr[13]&cpu_adr[12])))
+`define LYNNE_20K              (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | (cpu_adr[13]&cpu_adr[12])))
 
 // Define this to bring decoding back into the main CPLD (mainly for capacity evaluation). Note
 // that the address lsb latches are still assumed external to keep the same pin out. Must be defined
@@ -53,7 +56,7 @@
   // All-in-one CPLD - no offloading of decoding to external IC
   `define LOCAL_DECODING 1
   // Remove this definition to improve MHz at cost of logic
-  `undef FORCE_KEEP_CLOCK
+  //`undef FORCE_KEEP_CLOCK
   // Enough macrocells to export the clock to test points
   `define OBSERVE_CLOCKS 1
 `endif //  `ifdef MARK2B
@@ -343,35 +346,31 @@ module level1b_mk2_m (
     remapped_romAB_access_r = 0;
     remapped_romCF_access_r = 0;
     if (!cpu_data[7] & cpu_adr[15] & (cpu_vpa|cpu_vda) & map_data_q[`MAP_ROM_IDX]) begin
-      if (!cpu_adr[14]) begin
+      if (!cpu_adr[14])
 `ifdef MASTER_RAM_8000
-        if ( `L1_MASTER_MODE ) begin
+        begin
+          // ram_at_8000 always zero for non-Master machines
           remapped_romCF_access_r = (bbc_pagereg_q[3:2] == 2'b11) & (cpu_adr[12] | cpu_adr[13] | !ram_at_8000);
           remapped_romAB_access_r = (bbc_pagereg_q[3:1] == 3'b101) & (cpu_adr[12] | cpu_adr[13] | !ram_at_8000);
           remapped_rom47_access_r = (bbc_pagereg_q[3:2] == 2'b01) & (cpu_adr[12] | cpu_adr[13] | !ram_at_8000);
         end
-        else begin
+`else
+        begin
           remapped_romCF_access_r = (bbc_pagereg_q[3:2] == 2'b11) ;
           remapped_romAB_access_r = (bbc_pagereg_q[3:1] == 3'b101) ;
           remapped_rom47_access_r = (bbc_pagereg_q[3:2] == 2'b01) ;
         end
-      end
-`else
-      begin
-        remapped_romCF_access_r = (bbc_pagereg_q[3:2] == 2'b11) ;
-        remapped_romAB_access_r = (bbc_pagereg_q[3:1] == 3'b101) ;
-        remapped_rom47_access_r = (bbc_pagereg_q[3:2] == 2'b01) ;
-      end
 `endif
       // Remap MOS from C000-FBFF only (exclude IO space and vectors)
       else
 `ifdef MASTER_RAM_C000
         remapped_mos_access_r = !(&(cpu_adr[13:10])) & (cpu_adr[13] | !acccon_y);
 `else
-      remapped_mos_access_r = !(&(cpu_adr[13:10]));
+        remapped_mos_access_r = !(&(cpu_adr[13:10]));
 `endif
-    end
-  end
+    end // if (!cpu_data[7] & cpu_adr[15] & (cpu_vpa|cpu_vda) & map_data_q[`MAP_ROM_IDX])
+  end // always @ ( * )
+
 
   always @ ( * ) begin
     // Remap all of RAM area now and deal with video accesses separately
@@ -409,7 +408,6 @@ module level1b_mk2_m (
             write_thru_d = 1'b1;
 `endif
         end
-
       end
       else begin
         // Shadow mode disabled - all remapped memory accesses to bank &FF
@@ -417,7 +415,7 @@ module level1b_mk2_m (
         write_thru_d = (`VRAM_AREA) ;
       end
     end
-    if (remapped_rom47_access_r | remapped_romCF_access_r | remapped_romAB_access_r) begin
+    else if (remapped_rom47_access_r | remapped_romCF_access_r | remapped_romAB_access_r) begin
       if ( remapped_rom47_access_r )
         cpu_hiaddr_lat_d = 8'hFC;
       else if ( remapped_romAB_access_r )
@@ -496,7 +494,7 @@ module level1b_mk2_m (
         else if (cpld_reg_sel_w[`CPLD_REG_SEL_BBC_PAGEREG_IDX] & !cpu_rnw ) begin
           bbc_pagereg_q <= cpu_data;
 `ifdef MASTER_RAM_8000
-          ram_at_8000 <= cpu_data[7];
+          ram_at_8000 <= cpu_data[7] & `L1_MASTER_MODE;
 `endif
         end
         else if (cpld_reg_sel_w[`CPLD_REG_SEL_BBC_SHADOW_IDX] & !cpu_rnw ) begin
