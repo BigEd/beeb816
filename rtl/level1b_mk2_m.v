@@ -22,11 +22,11 @@
 `define DELAY_RAMOEB_BY_2
 //`define DELAY_RAMOEB_BY_3
 
-// Set this to slow down writes to VRAM area in both Master banks
-//`define SLOW_DOWN_BOTH_MASTER_VRAM_BANKS  1
-
 // Set this to relocate the MOS within the new bank from C000 to 8000
-`define RELOCATE_MOS 1
+//`define RELOCATE_MOS 1
+
+// Fixed clock divider now - default is /4 but can still compile with /2
+`define CLKDIV4NOT2 1
 
 // Define this for BBC MASTER support
 // `define ALLOW_BBC_MASTER_HOST 1
@@ -39,8 +39,6 @@
 `define VRAM_AREA_30K          (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | cpu_adr[13] | cpu_adr[12] | cpu_adr[11] ))
 `define VRAM_AREA_20K_N_31K    (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | ((map_data_q[`MAP_VRAM_SZ_IDX])? (cpu_adr[13]&cpu_adr[12]) : (cpu_adr[13]| cpu_adr[12] | cpu_adr[11] | cpu_adr[10]))))
 `define VRAM_AREA_31K          (!cpu_data[7] & !cpu_adr[15]  &(cpu_adr[14] | (cpu_adr[13]| cpu_adr[12] | cpu_adr[11] | cpu_adr[10])))
-`define VRAM_AREA_32K          (!cpu_data[7] & !cpu_adr[15] )
-`define VRAM_AREA_32K_N_31K    (!cpu_data[7] & !cpu_adr[15] & (map_data_q[`MAP_VRAM_SZ_IDX] | (cpu_adr[14] | cpu_adr[13]| cpu_adr[12] | cpu_adr[11] | cpu_adr[10])))
 `define LOWMEM_1K              (!cpu_data[7] & !cpu_adr[15]  & !(|cpu_adr[14:10]))
 `define LOWMEM_12K             (!cpu_data[7] & !cpu_adr[15] & !(cpu_adr[14] | (cpu_adr[13]&cpu_adr[12])))
 `define LYNNE_20K              (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | (cpu_adr[13]&cpu_adr[12])))
@@ -96,20 +94,20 @@
 `define L1_BPLUS_MODE  (map_data_q[`HOST_TYPE_1_IDX:`HOST_TYPE_0_IDX]==2'b01)
 `define L1_ELK_MODE    (map_data_q[`HOST_TYPE_1_IDX:`HOST_TYPE_0_IDX]==2'b10)
 
+`ifndef CLKDIV4NOT2
+  `define CLKDIV4NOT2 1
+`endif
+
 `ifdef ALLOW_BBC_MASTER_HOST
   `define MASTER_RAM_8000 1
   `define MASTER_RAM_C000 1
   `define L1_MASTER_MODE (map_data_q[`HOST_TYPE_1_IDX:`HOST_TYPE_0_IDX]==2'b11)
-  `define VRAM_AREA              `VRAM_AREA_20K_N_31K
-  `define SLOW_DOWN_BOTH_MASTER_VRAM_BANKS  1
+//  `define L1_MASTER_MODE   (bbc_master_mode_q)
 `else
   `undef  MASTER_RAM_8000
   `undef  MASTER_RAM_C000
-  `undef  SLOW_DOWN_BOTH_MASTER_VRAM_BANKS
   `define L1_MASTER_MODE (1'b0)
-  `define VRAM_AREA              `VRAM_AREA_31K
 `endif
-
 
 module level1b_mk2_m (
                       input [15:0]   cpu_adr,
@@ -179,6 +177,7 @@ module level1b_mk2_m (
   reg [7:0]                            cpu_hiaddr_lat_d;
   reg [ `IO_ACCESS_DELAY_SZ-1:0]       io_access_pipe_q;
 `ifdef MASTER_RAM_8000
+  reg                                  bbc_master_mode_q;
   reg                                  ram_at_8000;
 `endif
 `ifdef MASTER_RAM_C000
@@ -241,8 +240,7 @@ module level1b_mk2_m (
                     .rst_b(resetb),
                     .hsclk_sel(sel_hs_w),
                     .hsclk_selected(hs_selected_w),
-                    .cpuclk_div_sel(1'b1),           // Always chose /4 divider now
-//                    .cpuclk_div_sel(map_data_q[`CLK_CPUCLK_DIV_IDX]),
+                    .cpuclk_div_sel(`CLKDIV4NOT2),
                     .delay_bypass(map_data_q[`CLK_DELAY_IDX]),
                     .lsclk_selected(ls_selected_w),
                     .clkout(cpu_phi1_w),
@@ -394,27 +392,39 @@ module level1b_mk2_m (
 `endif
     end
     else if ( remapped_ram_access_r ) begin
-      if ( map_data_q[`SHADOW_MEM_IDX] ) begin
-        if (`VRAM_AREA & ((mos_vdu_sync_q) ? acccon_e : acccon_x )) begin
-          cpu_hiaddr_lat_d = 8'hFD;
-          write_thru_d = 1'b1;
-        end
-        else begin
+      if ( `LOWMEM_1K )
+        // All hosts, all access to bottom 1K is high speed to bank &FF
+        cpu_hiaddr_lat_d = 8'hFF;
+`ifdef ALLOW_BBC_MASTER_HOST
+      else if ( `L1_MASTER_MODE ) begin
+        // All accesses from Master to memory above the 1K base is write-through
+        write_thru_d = 1'b1;
+        if (`LOWMEM_12K )
+          // All accesses to memory below LYNNE go to main bank
           cpu_hiaddr_lat_d = 8'hFF;
-`ifdef SLOW_DOWN_BOTH_MASTER_VRAM_BANKS
-          // In Master host make all accesses to the video area of shadow memory run at
-          // slow write speed incase the shadow bank is used for the display.
-          if ( `VRAM_AREA & `L1_MASTER_MODE)
-            write_thru_d = 1'b1;
+        else if (map_data_q[`SHADOW_MEM_IDX] && (mos_vdu_sync_q ? acccon_e: acccon_x))
+          // Shadow mode accesses using VDU calls go to alternate bank
+          cpu_hiaddr_lat_d = 8'hFD;
+        else
+          // Shadow mode accesses _not_ using VDU calls and non Shadow mode accesses
+          cpu_hiaddr_lat_d = 8'hFF;
+      end // if ( `L1_MASTER_MODE )
 `endif
-        end
+      else if ( !map_data_q[`SHADOW_MEM_IDX] ) begin
+        // Beeb/Elk accesses to rest of RAM in non-shadow mode
+        cpu_hiaddr_lat_d = 8'hFF;
+        write_thru_d = 1'b1;
+      end
+      else if ( mos_vdu_sync_q ) begin
+        // Beeb/Elk accesses to rest of RAM in Shadow mode but via VDU calls
+        cpu_hiaddr_lat_d = 8'hFF;
+        write_thru_d = 1'b1;
       end
       else begin
-        // Shadow mode disabled - all remapped memory accesses to bank &FF
-        cpu_hiaddr_lat_d = 8'hFF;
-        write_thru_d = (`VRAM_AREA) ;
+        // Beeb/Elk accesses to rest of RAM in Shadow mode, non VDU calls
+        cpu_hiaddr_lat_d = 8'hFD;
       end
-    end
+    end // if ( remapped_ram_access_r )
     else if (remapped_rom47_access_r | remapped_romCF_access_r | remapped_romAB_access_r) begin
       if ( remapped_rom47_access_r )
         cpu_hiaddr_lat_d = 8'hFC;
@@ -571,5 +581,9 @@ module level1b_mk2_m (
   always @ ( * )
     if ( !bbc_phi1 )
       bbc_data_lat_q <= bbc_data;
+
+//  always @ (negedge cpu_phi2_w)
+//    bbc_master_mode_q <= (map_data_q[`HOST_TYPE_1_IDX:`HOST_TYPE_0_IDX]==2'b11);
+
 
 endmodule // level1b_m
