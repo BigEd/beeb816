@@ -9,7 +9,7 @@
 // Depth of pipeline to delay switches to HS clock after an IO access. Need more cycles for
 // faster clocks so ideally this should be linked with the divider setting. Over 16MHz needs
 // 5 cycles but 13.8MHz seems ok with 4. Modified now to count SYNCs rather than cycles
-`define IO_ACCESS_DELAY_SZ     3
+`define IO_ACCESS_DELAY_SZ     4
 //
 // Define this to force-keep some clock nets to reduce design size
 `define FORCE_KEEP_CLOCK 1
@@ -35,10 +35,6 @@
 // Define this for Master RAM overlay at C000
 // `define MASTER_RAM_C000 1
 // Trial code to make VRAM area larger than default of 20K to simplify decoding(can be used with above)
-`define VRAM_AREA_20K          (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | (cpu_adr[13]&cpu_adr[12])))
-`define VRAM_AREA_30K          (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | cpu_adr[13] | cpu_adr[12] | cpu_adr[11] ))
-`define VRAM_AREA_20K_N_31K    (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | ((map_data_q[`MAP_VRAM_SZ_IDX])? (cpu_adr[13]&cpu_adr[12]) : (cpu_adr[13]| cpu_adr[12] | cpu_adr[11] | cpu_adr[10]))))
-`define VRAM_AREA_31K          (!cpu_data[7] & !cpu_adr[15]  &(cpu_adr[14] | (cpu_adr[13]| cpu_adr[12] | cpu_adr[11] | cpu_adr[10])))
 `define LOWMEM_1K              (!cpu_data[7] & !cpu_adr[15]  & !(|cpu_adr[14:10]))
 `define LOWMEM_12K             (!cpu_data[7] & !cpu_adr[15] & !(cpu_adr[14] | (cpu_adr[13]&cpu_adr[12])))
 `define LYNNE_20K              (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | (cpu_adr[13]&cpu_adr[12])))
@@ -79,10 +75,7 @@
 `define HOST_TYPE_1_IDX               6
 `define HOST_TYPE_0_IDX               5
 `define MAP_ROM_IDX                   4
-`define MAP_VRAM_SZ_IDX               3
 `define MAP_HSCLK_EN_IDX              2
-`define CLK_DELAY_IDX                 1
-`define CLK_CPUCLK_DIV_IDX            0
 
 `define BBC_PAGEREG_SZ                4    // only the bottom four ROM selection bits
 `define CPLD_REG_SEL_SZ               3
@@ -151,7 +144,7 @@ module level1b_mk2_m (
                       output         bbc_phi1,
                       output         bbc_phi2,
                       output         cpu_phi2
-		  );
+                  );
 
   reg [7:0]                            cpu_hiaddr_lat_q;
   reg [7:0]                            cpu_data_r;
@@ -241,7 +234,7 @@ module level1b_mk2_m (
                     .hsclk_sel(sel_hs_w),
                     .hsclk_selected(hs_selected_w),
                     .cpuclk_div_sel(`CLKDIV4NOT2),
-                    .delay_bypass(map_data_q[`CLK_DELAY_IDX]),
+                    .delay_bypass(j[1]),
                     .lsclk_selected(ls_selected_w),
                     .clkout(cpu_phi1_w),
                     .fast_clkout(fast_clk_w)
@@ -302,7 +295,7 @@ module level1b_mk2_m (
   assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_SHADOW_IDX] = (cpu_data[7]== 1'b0) && `DECODED_SHADOW_REG ;
   // Force dummy read access when accessing himem explicitly but not for remapped RAM accesses which can still complete
 `ifdef MARK2B
-  assign bbc_adr = { (dummy_access_w) ? 16'hC000 : cpu_adr };
+  assign bbc_adr = { (dummy_access_w) ? (mos_vdu_sync_q ? 16'hC000 : 16'hE000) : cpu_adr };
 `else
   assign bbc_adr = { (dummy_access_w) ? 4'b1100 : cpu_adr[15:12] };
 `endif
@@ -441,18 +434,15 @@ module level1b_mk2_m (
   always @ ( * )
     if ( cpu_phi2_w & cpu_rnw )
       begin
-	if (cpu_hiaddr_lat_q[7]) begin
-	  if (cpld_reg_sel_w[`CPLD_REG_SEL_MAP_CC_IDX] ) begin
+        if (cpu_hiaddr_lat_q[7]) begin
+          if (cpld_reg_sel_w[`CPLD_REG_SEL_MAP_CC_IDX] ) begin
             // Not all bits are used so assign default first, then individual bits
-	    cpu_data_r = 8'b0  ;
-	    cpu_data_r[`MAP_HSCLK_EN_IDX]      = map_data_q[`MAP_HSCLK_EN_IDX] ;
-	    cpu_data_r[`MAP_VRAM_SZ_IDX]       = map_data_q[`MAP_VRAM_SZ_IDX] ;
-	    cpu_data_r[`SHADOW_MEM_IDX]        = map_data_q[`SHADOW_MEM_IDX];
+            cpu_data_r = 8'b0  ;
+            cpu_data_r[`MAP_HSCLK_EN_IDX]      = map_data_q[`MAP_HSCLK_EN_IDX] ;
+            cpu_data_r[`SHADOW_MEM_IDX]        = map_data_q[`SHADOW_MEM_IDX];
             cpu_data_r[`HOST_TYPE_1_IDX]       = map_data_q[`HOST_TYPE_1_IDX];
             cpu_data_r[`HOST_TYPE_0_IDX]       = map_data_q[`HOST_TYPE_0_IDX];
-	    cpu_data_r[`MAP_ROM_IDX]           = map_data_q[`MAP_ROM_IDX];
-	    cpu_data_r[`CLK_DELAY_IDX]         = map_data_q[`CLK_DELAY_IDX];
-	    cpu_data_r[`CLK_CPUCLK_DIV_IDX]    = map_data_q[`CLK_CPUCLK_DIV_IDX];
+            cpu_data_r[`MAP_ROM_IDX]           = map_data_q[`MAP_ROM_IDX];
           end
           else //must be RAM access
             cpu_data_r = {8{1'bz}};
@@ -472,15 +462,12 @@ module level1b_mk2_m (
     if ( !resetb )
       begin
         // DIP2 = MASTER MODE startup - shadow ON, host ID, bypass clock delay, VRAM size set
-	map_data_q[`MAP_HSCLK_EN_IDX]    <= 1'b0;
-	map_data_q[`MAP_ROM_IDX]         <= 1'b0;
-	map_data_q[`MAP_VRAM_SZ_IDX]     <= j[1];  // DIP2
+        map_data_q[`MAP_HSCLK_EN_IDX]    <= 1'b0;
+        map_data_q[`MAP_ROM_IDX]         <= 1'b0;
         // Use DIP/jumpers to select divider ratio on startup
-	map_data_q[`HOST_TYPE_1_IDX]     <= j[1];  // DIP2
-	map_data_q[`HOST_TYPE_0_IDX]     <= j[1];  // DIP2
-	map_data_q[`CLK_CPUCLK_DIV_IDX]  <= 1'b0;
-	map_data_q[`CLK_DELAY_IDX]       <= j[1];  // DIP2
-	map_data_q[`SHADOW_MEM_IDX]      <= j[1];  // DIP2
+        map_data_q[`HOST_TYPE_1_IDX]     <= j[1];  // DIP2
+        map_data_q[`HOST_TYPE_0_IDX]     <= j[1];  // DIP2
+        map_data_q[`SHADOW_MEM_IDX]      <= j[1];  // DIP2
         bbc_pagereg_q <= {`BBC_PAGEREG_SZ{1'b0}};
 `ifdef MASTER_RAM_8000
         ram_at_8000 <= 1'b0;
@@ -492,14 +479,11 @@ module level1b_mk2_m (
     else
       begin
         if (cpld_reg_sel_w[`CPLD_REG_SEL_MAP_CC_IDX] & !cpu_rnw) begin
-	  map_data_q[`MAP_HSCLK_EN_IDX]   <= cpu_data[`MAP_HSCLK_EN_IDX] ;
-	  map_data_q[`MAP_VRAM_SZ_IDX]    <= cpu_data[`MAP_VRAM_SZ_IDX];
-	  map_data_q[`SHADOW_MEM_IDX]     <= cpu_data[`SHADOW_MEM_IDX];
+          map_data_q[`MAP_HSCLK_EN_IDX]   <= cpu_data[`MAP_HSCLK_EN_IDX] ;
+          map_data_q[`SHADOW_MEM_IDX]     <= cpu_data[`SHADOW_MEM_IDX];
           map_data_q[`HOST_TYPE_1_IDX]    <= cpu_data[`HOST_TYPE_1_IDX];
           map_data_q[`HOST_TYPE_0_IDX]    <= cpu_data[`HOST_TYPE_0_IDX];
-	  map_data_q[`MAP_ROM_IDX]        <= cpu_data[`MAP_ROM_IDX];
-	  map_data_q[`CLK_DELAY_IDX]      <= cpu_data[`CLK_DELAY_IDX];
-	  map_data_q[`CLK_CPUCLK_DIV_IDX] <= cpu_data[`CLK_CPUCLK_DIV_IDX];
+          map_data_q[`MAP_ROM_IDX]        <= cpu_data[`MAP_ROM_IDX];
         end // if (cpld_reg_sel_w[`CPLD_REG_SEL_MAP_CC_IDX] & !cpu_rnw)
         else if (cpld_reg_sel_w[`CPLD_REG_SEL_BBC_PAGEREG_IDX] & !cpu_rnw ) begin
           bbc_pagereg_q <= cpu_data;
@@ -553,7 +537,7 @@ module level1b_mk2_m (
     if ( cpu_vpa & cpu_vda ) begin
 `ifdef MASTER_RAM_C000
       if ( acccon_y )
-        mos_vdu_sync_q <= acccon_x;
+        mos_vdu_sync_q <= 1'b0;
       else if ( map_data_q[`MAP_ROM_IDX])
         mos_vdu_sync_q <= ({cpu_hiaddr_lat_q[7], cpu_hiaddr_lat_q[4:0],cpu_adr[15:13]}==9'b1_11111_110);
       else
