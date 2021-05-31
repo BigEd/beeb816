@@ -295,7 +295,7 @@ module level1b_mk2_m (
   assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_SHADOW_IDX] = (cpu_data[7]== 1'b0) && `DECODED_SHADOW_REG ;
   // Force dummy read access when accessing himem explicitly but not for remapped RAM accesses which can still complete
 `ifdef MARK2B
-  assign bbc_adr = { (dummy_access_w) ? 16'hC000 : cpu_adr };
+  assign bbc_adr = { (dummy_access_w) ? (mos_vdu_sync_q ? 16'hC000 : 16'hE000) : cpu_adr };
 `else
   assign bbc_adr = { (dummy_access_w) ? 4'b1100 : cpu_adr[15:12] };
 `endif
