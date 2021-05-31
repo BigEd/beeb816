@@ -537,7 +537,7 @@ module level1b_mk2_m (
     if ( cpu_vpa & cpu_vda ) begin
 `ifdef MASTER_RAM_C000
       if ( acccon_y )
-        mos_vdu_sync_q <= acccon_x;
+        mos_vdu_sync_q <= 1'b0;
       else if ( map_data_q[`MAP_ROM_IDX])
         mos_vdu_sync_q <= ({cpu_hiaddr_lat_q[7], cpu_hiaddr_lat_q[4:0],cpu_adr[15:13]}==9'b1_11111_110);
       else
