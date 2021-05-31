@@ -9,7 +9,7 @@
 // Depth of pipeline to delay switches to HS clock after an IO access. Need more cycles for
 // faster clocks so ideally this should be linked with the divider setting. Over 16MHz needs
 // 5 cycles but 13.8MHz seems ok with 4. Modified now to count SYNCs rather than cycles
-`define IO_ACCESS_DELAY_SZ     3
+`define IO_ACCESS_DELAY_SZ     4
 //
 // Define this to force-keep some clock nets to reduce design size
 `define FORCE_KEEP_CLOCK 1
