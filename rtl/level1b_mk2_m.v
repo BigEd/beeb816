@@ -6,11 +6,10 @@
 // the Mark2A into a single device
 // `define MARK2B 1
 //
-// Depth of pipeline to delay switches to HS clock after an IO access. Need more cycles for
-// faster clocks so ideally this should be linked with the divider setting. Over 16MHz needs
-// 5 cycles but 13.8MHz seems ok with 4. Modified now to count SYNCs rather than cycles
+// Depth of pipeline to delay switches to HS clock after an IO access.
+// Modified now to count SYNCs rather than cycles
 `define IO_ACCESS_DELAY_SZ     4
-//
+
 // Define this to force-keep some clock nets to reduce design size
 `define FORCE_KEEP_CLOCK 1
 
@@ -30,11 +29,8 @@
 
 // Define this for BBC MASTER support
 // `define ALLOW_BBC_MASTER_HOST 1
-// Define this for Master RAM overlay at 8000
-// `define MASTER_RAM_8000 1
-// Define this for Master RAM overlay at C000
-// `define MASTER_RAM_C000 1
-// Trial code to make VRAM area larger than default of 20K to simplify decoding(can be used with above)
+
+// Decoding for fixed address areas of RAM
 `define LOWMEM_1K              (!cpu_data[7] & !cpu_adr[15]  & !(|cpu_adr[14:10]))
 `define LOWMEM_12K             (!cpu_data[7] & !cpu_adr[15] & !(cpu_adr[14] | (cpu_adr[13]&cpu_adr[12])))
 `define LYNNE_20K              (!cpu_data[7] & !cpu_adr[15] & (cpu_adr[14] | (cpu_adr[13]&cpu_adr[12])))
@@ -45,16 +41,19 @@
 // `define LOCAL_DECODING 1
 
 `ifdef MARK2B
-  // Enable MASTER code
   `define ALLOW_BBC_MASTER_HOST 1
+  `define ALLOW_BEEB_HOST 1
+  `define ALLOW_ELK_HOST 1
   // All-in-one CPLD - no offloading of decoding to external IC
   `define LOCAL_DECODING 1
   // Remove this definition to improve MHz at cost of logic
-  //`undef FORCE_KEEP_CLOCK
+  `undef FORCE_KEEP_CLOCK
   // Enough macrocells to export the clock to test points
   `define OBSERVE_CLOCKS 1
+`else
+  `define ALLOW_BEEB_HOST 1
+  `define ALLOW_ELK_HOST 1
 `endif //  `ifdef MARK2B
-
 
 `ifdef LOCAL_DECODING
   `define ELK_PAGED_ROM_SEL 16'hFE05
@@ -83,24 +82,37 @@
 `define CPLD_REG_SEL_MAP_CC_IDX       1
 `define CPLD_REG_SEL_BBC_PAGEREG_IDX  0
 
-`define L1_BEEB_MODE   (map_data_q[`HOST_TYPE_1_IDX:`HOST_TYPE_0_IDX]==2'b00)
-`define L1_BPLUS_MODE  (map_data_q[`HOST_TYPE_1_IDX:`HOST_TYPE_0_IDX]==2'b01)
-`define L1_ELK_MODE    (map_data_q[`HOST_TYPE_1_IDX:`HOST_TYPE_0_IDX]==2'b10)
 
 `ifndef CLKDIV4NOT2
   `define CLKDIV4NOT2 1
 `endif
 
-`ifdef ALLOW_BBC_MASTER_HOST
-  `define MASTER_RAM_8000 1
-  `define MASTER_RAM_C000 1
-  `define L1_MASTER_MODE (map_data_q[`HOST_TYPE_1_IDX:`HOST_TYPE_0_IDX]==2'b11)
-//  `define L1_MASTER_MODE   (bbc_master_mode_q)
+`ifdef ALLOW_ELK_HOST
+  `define L1_ELK_MODE    (map_data_q[`HOST_TYPE_1_IDX:`HOST_TYPE_0_IDX]==2'b10)
 `else
-  `undef  MASTER_RAM_8000
-  `undef  MASTER_RAM_C000
+  `define L1_ELK_MODE    1'b0
+`endif
+
+`ifdef ALLOW_BEEB_HOST
+  `define L1_BEEB_MODE   (map_data_q[`HOST_TYPE_1_IDX:`HOST_TYPE_0_IDX]==2'b00)
+  `define L1_BPLUS_MODE  (map_data_q[`HOST_TYPE_1_IDX:`HOST_TYPE_0_IDX]==2'b01)
+`else
+  `define L1_BEEB_MODE   1'b0
+  `define L1_BPLUS_MODE  1'b0
+`endif
+
+`ifdef ALLOW_BBC_MASTER_HOST
+  `define L1_MASTER_MODE (map_data_q[`HOST_TYPE_1_IDX:`HOST_TYPE_0_IDX]==2'b11)
+`else
   `define L1_MASTER_MODE (1'b0)
 `endif
+
+`ifdef ALLOW_ELK_HOST
+  `define ALLOW_BEEB_OR_ELK_HOST 1
+`elsif ALLOW_BEEB_HOST
+  `define ALLOW_BEEB_OR_ELK_HOST 1
+`endif
+
 
 module level1b_mk2_m (
                       input [15:0]   cpu_adr,
@@ -169,11 +181,8 @@ module level1b_mk2_m (
   reg                                  cpu_a14_lat_q;
   reg [7:0]                            cpu_hiaddr_lat_d;
   reg [ `IO_ACCESS_DELAY_SZ-1:0]       io_access_pipe_q;
-`ifdef MASTER_RAM_8000
-  reg                                  bbc_master_mode_q;
+`ifdef ALLOW_BBC_MASTER_HOST
   reg                                  ram_at_8000;
-`endif
-`ifdef MASTER_RAM_C000
   reg                                  acccon_y; // bit 3 of FE34
   reg                                  acccon_x; // bit 2 of FE34
   reg                                  acccon_e; // bit 1 of FE34
@@ -234,7 +243,7 @@ module level1b_mk2_m (
                     .hsclk_sel(sel_hs_w),
                     .hsclk_selected(hs_selected_w),
                     .cpuclk_div_sel(`CLKDIV4NOT2),
-                    .delay_bypass(j[1]),
+                    .delay_bypass(`L1_MASTER_MODE),
                     .lsclk_selected(ls_selected_w),
                     .clkout(cpu_phi1_w),
                     .fast_clkout(fast_clk_w)
@@ -302,12 +311,16 @@ module level1b_mk2_m (
 
   // Build delay chain for use with Electron to improve xtalk (will be bypassed for other machines)
 
+`ifdef ALLOW_ELK_HOST
   (* KEEP="TRUE" *) wire bbc_rnw_pre, bbc_rnw_del, bbc_rnw_del2;
   assign bbc_rnw_pre = cpu_rnw | dummy_access_w ;
   BUF    bbc_rnw_0( .I(bbc_rnw_pre), .O(bbc_rnw_del) );
   BUF    bbc_rnw_1( .I(bbc_rnw_del), .O(bbc_rnw_del2) );
   // Electron needs delay on RNW to reduce xtalk
   assign bbc_rnw = (`L1_ELK_MODE) ? (bbc_rnw_del2 | bbc_rnw_pre) : bbc_rnw_pre ;
+`else
+  assign bbc_rnw = cpu_rnw | dummy_access_w ;
+`endif
   assign bbc_data = ( !bbc_rnw & bbc_phi2) ? cpu_data : { 8{1'bz}};
   assign cpu_data = cpu_data_r;
 
@@ -337,31 +350,28 @@ module level1b_mk2_m (
     remapped_romAB_access_r = 0;
     remapped_romCF_access_r = 0;
     if (!cpu_data[7] & cpu_adr[15] & (cpu_vpa|cpu_vda) & map_data_q[`MAP_ROM_IDX]) begin
-      if (!cpu_adr[14])
-`ifdef MASTER_RAM_8000
-        begin
-          // ram_at_8000 always zero for non-Master machines
-          remapped_romCF_access_r = (bbc_pagereg_q[3:2] == 2'b11) & (cpu_adr[12] | cpu_adr[13] | !ram_at_8000);
-          remapped_romAB_access_r = (bbc_pagereg_q[3:1] == 3'b101) & (cpu_adr[12] | cpu_adr[13] | !ram_at_8000);
-          remapped_rom47_access_r = (bbc_pagereg_q[3:2] == 2'b01) & (cpu_adr[12] | cpu_adr[13] | !ram_at_8000);
-        end
-`else
-        begin
-          remapped_romCF_access_r = (bbc_pagereg_q[3:2] == 2'b11) ;
-          remapped_romAB_access_r = (bbc_pagereg_q[3:1] == 3'b101) ;
-          remapped_rom47_access_r = (bbc_pagereg_q[3:2] == 2'b01) ;
-        end
-`endif
-      // Remap MOS from C000-FBFF only (exclude IO space and vectors)
+`ifdef ALLOW_BBC_MASTER_HOST
+      if (!cpu_adr[14]) begin
+        // ram_at_8000 always zero for non-Master machines
+        remapped_romCF_access_r = (bbc_pagereg_q[3:2] == 2'b11) & (cpu_adr[12] | cpu_adr[13] | !ram_at_8000);
+        remapped_romAB_access_r = (bbc_pagereg_q[3:1] == 3'b101) & (cpu_adr[12] | cpu_adr[13] | !ram_at_8000);
+        remapped_rom47_access_r = (bbc_pagereg_q[3:2] == 2'b01) & (cpu_adr[12] | cpu_adr[13] | !ram_at_8000);
+      end
       else
-`ifdef MASTER_RAM_C000
+        // Remap MOS from C000-FBFF only (exclude IO space and vectors)
         remapped_mos_access_r = !(&(cpu_adr[13:10])) & (cpu_adr[13] | !acccon_y);
 `else
+      if (!cpu_adr[14]) begin
+        remapped_romCF_access_r = (bbc_pagereg_q[3:2] == 2'b11) ;
+        remapped_romAB_access_r = (bbc_pagereg_q[3:1] == 3'b101) ;
+        remapped_rom47_access_r = (bbc_pagereg_q[3:2] == 2'b01) ;
+      end
+      else
+        // Remap MOS from C000-FBFF only (exclude IO space and vectors)
         remapped_mos_access_r = !(&(cpu_adr[13:10]));
 `endif
     end // if (!cpu_data[7] & cpu_adr[15] & (cpu_vpa|cpu_vda) & map_data_q[`MAP_ROM_IDX])
   end // always @ ( * )
-
 
   always @ ( * ) begin
     // Remap all of RAM area now and deal with video accesses separately
@@ -402,7 +412,8 @@ module level1b_mk2_m (
           // Shadow mode accesses _not_ using VDU calls and non Shadow mode accesses
           cpu_hiaddr_lat_d = 8'hFF;
       end // if ( `L1_MASTER_MODE )
-`endif
+`endif //  `ifdef ALLOW_BBC_MASTER_HOST
+`ifdef ALLOW_BEEB_OR_ELK_HOST
       else if ( !map_data_q[`SHADOW_MEM_IDX] ) begin
         // Beeb/Elk accesses to rest of RAM in non-shadow mode
         cpu_hiaddr_lat_d = 8'hFF;
@@ -417,6 +428,7 @@ module level1b_mk2_m (
         // Beeb/Elk accesses to rest of RAM in Shadow mode, non VDU calls
         cpu_hiaddr_lat_d = 8'hFD;
       end
+`endif
     end // if ( remapped_ram_access_r )
     else if (remapped_rom47_access_r | remapped_romCF_access_r | remapped_romAB_access_r) begin
       if ( remapped_rom47_access_r )
@@ -464,15 +476,12 @@ module level1b_mk2_m (
         // DIP2 = MASTER MODE startup - shadow ON, host ID, bypass clock delay, VRAM size set
         map_data_q[`MAP_HSCLK_EN_IDX]    <= 1'b0;
         map_data_q[`MAP_ROM_IDX]         <= 1'b0;
-        // Use DIP/jumpers to select divider ratio on startup
         map_data_q[`HOST_TYPE_1_IDX]     <= j[1];  // DIP2
         map_data_q[`HOST_TYPE_0_IDX]     <= j[1];  // DIP2
         map_data_q[`SHADOW_MEM_IDX]      <= j[1];  // DIP2
         bbc_pagereg_q <= {`BBC_PAGEREG_SZ{1'b0}};
-`ifdef MASTER_RAM_8000
+`ifdef ALLOW_BBC_MASTER_HOST
         ram_at_8000 <= 1'b0;
-`endif
-`ifdef MASTER_RAM_C000
         {acccon_y, acccon_x, acccon_e} <= { 2'b00, !(`L1_MASTER_MODE) } ;
 `endif
       end
@@ -487,14 +496,16 @@ module level1b_mk2_m (
         end // if (cpld_reg_sel_w[`CPLD_REG_SEL_MAP_CC_IDX] & !cpu_rnw)
         else if (cpld_reg_sel_w[`CPLD_REG_SEL_BBC_PAGEREG_IDX] & !cpu_rnw ) begin
           bbc_pagereg_q <= cpu_data;
-`ifdef MASTER_RAM_8000
+`ifdef ALLOW_BBC_MASTER_HOST
           ram_at_8000 <= cpu_data[7] & `L1_MASTER_MODE;
 `endif
         end
         else if (cpld_reg_sel_w[`CPLD_REG_SEL_BBC_SHADOW_IDX] & !cpu_rnw ) begin
+`ifdef ALLOW_BEEB_OR_ELK_HOST
           if `L1_BPLUS_MODE
             map_data_q[`SHADOW_MEM_IDX] <= cpu_data[`SHADOW_MEM_IDX];
-`ifdef MASTER_RAM_C000
+`endif
+`ifdef ALLOW_BBC_MASTER_HOST
           if `L1_MASTER_MODE
             {acccon_y, acccon_x, acccon_e} <= cpu_data[3:1];
 `endif
@@ -535,7 +546,7 @@ module level1b_mk2_m (
   //
   always @ ( negedge cpu_phi2_w )
     if ( cpu_vpa & cpu_vda ) begin
-`ifdef MASTER_RAM_C000
+`ifdef ALLOW_BBC_MASTER_HOST
       if ( acccon_y )
         mos_vdu_sync_q <= 1'b0;
       else if ( map_data_q[`MAP_ROM_IDX])
@@ -565,9 +576,5 @@ module level1b_mk2_m (
   always @ ( * )
     if ( !bbc_phi1 )
       bbc_data_lat_q <= bbc_data;
-
-//  always @ (negedge cpu_phi2_w)
-//    bbc_master_mode_q <= (map_data_q[`HOST_TYPE_1_IDX:`HOST_TYPE_0_IDX]==2'b11);
-
 
 endmodule // level1b_m
