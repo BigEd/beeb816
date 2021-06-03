@@ -341,7 +341,8 @@ module level1b_mk2_m (
   // * on invalid bus cycles if hs clock is already selected
   assign himem_w =  cpu_hiaddr_lat_q[7] & (!write_thru_lat_q | cpu_rnw );
 
-  assign hisync_w = (cpu_vpa&cpu_vda) & cpu_hiaddr_lat_q[7];
+  // Allow hisync to be set for any valid program address (was opcode fetch only - ie vpa & vda)
+  assign hisync_w = (cpu_vpa) & cpu_hiaddr_lat_q[7];
   assign sel_hs_w = (( hisync_w & !io_access_pipe_q[0] ) |
                      ( himem_w & hs_selected_w) |
                      (!cpu_vpa & !cpu_vda & hs_selected_w)
