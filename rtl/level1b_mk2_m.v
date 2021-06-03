@@ -47,7 +47,7 @@
   // All-in-one CPLD - no offloading of decoding to external IC
   `define LOCAL_DECODING 1
   // Remove this definition to improve MHz at cost of logic
-  `undef FORCE_KEEP_CLOCK
+  //`undef FORCE_KEEP_CLOCK
   // Enough macrocells to export the clock to test points
   `define OBSERVE_CLOCKS 1
 `else
@@ -82,7 +82,6 @@
 `define CPLD_REG_SEL_MAP_CC_IDX       1
 `define CPLD_REG_SEL_BBC_PAGEREG_IDX  0
 
-
 `ifndef CLKDIV4NOT2
   `define CLKDIV4NOT2 1
 `endif
@@ -101,18 +100,21 @@
   `define L1_BPLUS_MODE  1'b0
 `endif
 
-`ifdef ALLOW_BBC_MASTER_HOST
-  `define L1_MASTER_MODE (map_data_q[`HOST_TYPE_1_IDX:`HOST_TYPE_0_IDX]==2'b11)
-`else
-  `define L1_MASTER_MODE (1'b0)
-`endif
-
 `ifdef ALLOW_ELK_HOST
   `define ALLOW_BEEB_OR_ELK_HOST 1
 `elsif ALLOW_BEEB_HOST
   `define ALLOW_BEEB_OR_ELK_HOST 1
 `endif
 
+`ifdef ALLOW_BBC_MASTER_HOST
+  `ifdef ALLOW_BEEB_OR_ELK_HOST
+    `define L1_MASTER_MODE (map_data_q[`HOST_TYPE_1_IDX:`HOST_TYPE_0_IDX]==2'b11)
+  `else
+    `define L1_MASTER_MODE (1'b1)
+  `endif
+`else
+  `define L1_MASTER_MODE (1'b0)
+`endif
 
 module level1b_mk2_m (
                       input [15:0]   cpu_adr,
@@ -183,6 +185,7 @@ module level1b_mk2_m (
   reg [ `IO_ACCESS_DELAY_SZ-1:0]       io_access_pipe_q;
 `ifdef ALLOW_BBC_MASTER_HOST
   reg                                  ram_at_8000;
+  reg                                  mos_vdu_sync_acccon_q;
   reg                                  acccon_y; // bit 3 of FE34
   reg                                  acccon_x; // bit 2 of FE34
   reg                                  acccon_e; // bit 1 of FE34
@@ -304,7 +307,11 @@ module level1b_mk2_m (
   assign cpld_reg_sel_d[`CPLD_REG_SEL_BBC_SHADOW_IDX] = (cpu_data[7]== 1'b0) && `DECODED_SHADOW_REG ;
   // Force dummy read access when accessing himem explicitly but not for remapped RAM accesses which can still complete
 `ifdef MARK2B
+`ifdef ALLOW_BBC_MASTER_HOST
   assign bbc_adr = { (dummy_access_w) ? (mos_vdu_sync_q ? 16'hC000 : 16'hE000) : cpu_adr };
+`else
+  assign bbc_adr = { (dummy_access_w) ? 16'hC000 : cpu_adr };
+`endif
 `else
   assign bbc_adr = { (dummy_access_w) ? 4'b1100 : cpu_adr[15:12] };
 `endif
@@ -405,8 +412,10 @@ module level1b_mk2_m (
         if (`LOWMEM_12K )
           // All accesses to memory below LYNNE go to main bank
           cpu_hiaddr_lat_d = 8'hFF;
-        else if (map_data_q[`SHADOW_MEM_IDX] && (mos_vdu_sync_q ? acccon_e: acccon_x))
-          // Shadow mode accesses using VDU calls go to alternate bank
+//        else if (map_data_q[`SHADOW_MEM_IDX] && (mos_vdu_sync_q ? acccon_e: acccon_x))
+        else if (mos_vdu_sync_acccon_q )
+          // Shadow mode accesses using VDU calls go to alternate bank (Shadow mode
+          // is always enabled in Master mode)
           cpu_hiaddr_lat_d = 8'hFD;
         else
           // Shadow mode accesses _not_ using VDU calls and non Shadow mode accesses
@@ -540,19 +549,18 @@ module level1b_mk2_m (
   // Instruction was fetched from VDU routines in MOS if
   // - in the range FFC000 - FFDFFF (if remapped to himem )
   // - OR in range 00C000 - 00DFFF if ROM remapping disabled.
-  //
-  // ie 11111111_110xxxxx  (decoded as 1xxx11xx_110xxxx)
-  //    00000000_110xxxxx  (decoded as 0xxxxxxx_110xxxx)
-  //
   always @ ( negedge cpu_phi2_w )
     if ( cpu_vpa & cpu_vda ) begin
 `ifdef ALLOW_BBC_MASTER_HOST
-      if ( acccon_y )
+      if ( acccon_y ) begin
         mos_vdu_sync_q <= 1'b0;
-      else if ( map_data_q[`MAP_ROM_IDX])
+      end
+      else if ( map_data_q[`MAP_ROM_IDX]) begin
         mos_vdu_sync_q <= ({cpu_hiaddr_lat_q[7], cpu_hiaddr_lat_q[4:0],cpu_adr[15:13]}==9'b1_11111_110);
-      else
+      end
+      else begin
         mos_vdu_sync_q <= ({cpu_hiaddr_lat_q[7],cpu_adr[15:13]}==4'b0_110);
+      end
 `else
       if ( map_data_q[`MAP_ROM_IDX])
         mos_vdu_sync_q <= ({cpu_hiaddr_lat_q[7], cpu_hiaddr_lat_q[4:0],cpu_adr[15:13]}==9'b1_11111_110) ;
@@ -560,6 +568,11 @@ module level1b_mk2_m (
         mos_vdu_sync_q <= ({cpu_hiaddr_lat_q[7],cpu_adr[15:13]}==4'b0_110) ;
 `endif
     end // if ( cpu_vpa & cpu_vda )
+
+`ifdef ALLOW_BBC_MASTER_HOST
+  always @ ( posedge cpu_phi2_w )
+    mos_vdu_sync_acccon_q <= (mos_vdu_sync_q) ? acccon_e: acccon_x;
+`endif
 
   // Latches for the high address bits open during PHI1
   always @ ( * )
