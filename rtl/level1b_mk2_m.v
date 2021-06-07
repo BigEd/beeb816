@@ -21,9 +21,6 @@
 `define DELAY_RAMOEB_BY_2
 //`define DELAY_RAMOEB_BY_3
 
-// Set this to relocate the MOS within the new bank from C000 to 8000
-//`define RELOCATE_MOS 1
-
 // Fixed clock divider now - default is /4 but can still compile with /2
 `define CLKDIV4NOT2 1
 
@@ -47,7 +44,7 @@
   // All-in-one CPLD - no offloading of decoding to external IC
   `define LOCAL_DECODING 1
   // Remove this definition to improve MHz at cost of logic
-  //`undef FORCE_KEEP_CLOCK
+  `undef FORCE_KEEP_CLOCK
   // Enough macrocells to export the clock to test points
   `define OBSERVE_CLOCKS 1
 `else
@@ -396,12 +393,8 @@ module level1b_mk2_m (
     // Native mode interrupts go to bank 0xFF (with other native 816 code)
     if ( native_mode_int_w )
       cpu_hiaddr_lat_d = 8'hFF;
-    else if ( remapped_mos_access_r ) begin
+    else if ( remapped_mos_access_r )
       cpu_hiaddr_lat_d = 8'hFF;
-`ifdef RELOCATE_MOS
-      cpu_a14_lat_d = 1'b0;
-`endif
-    end
     else if ( remapped_ram_access_r ) begin
       if ( `LOWMEM_1K )
         // All hosts, all access to bottom 1K is high speed to bank &FF
@@ -413,7 +406,6 @@ module level1b_mk2_m (
         if (`LOWMEM_12K )
           // All accesses to memory below LYNNE go to main bank
           cpu_hiaddr_lat_d = 8'hFF;
-//        else if (map_data_q[`SHADOW_MEM_IDX] && (mos_vdu_sync_q ? acccon_e: acccon_x))
         else if (mos_vdu_sync_acccon_q )
           // Shadow mode accesses using VDU calls go to alternate bank (Shadow mode
           // is always enabled in Master mode)
